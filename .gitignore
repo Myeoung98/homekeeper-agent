@@ -1,0 +1,13 @@
+.env
+*.db
+*.db-shm
+*.db-wal
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.claude/
+_bmad/
+_bmad-output/
+design-artifacts/
+docs/
