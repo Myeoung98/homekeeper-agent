@@ -1,53 +1,58 @@
+import json
 import os
-import anthropic
 
-_client: anthropic.Anthropic | None = None
+from groq import Groq
+
+_client: Groq | None = None
 
 
-def _get_client() -> anthropic.Anthropic:
+def _get_client() -> Groq:
     global _client
     if _client is None:
-        _client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        _client = Groq(api_key=os.environ["GROQ_API_KEY"])
     return _client
 
 
 _PROCESS_REQUEST_TOOL = {
-    "name": "process_request",
-    "description": "Phân tích yêu cầu bảo trì nhà và trả về intent có cấu trúc",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "intent": {
-                "type": "string",
-                "enum": ["create_task", "find_repairman", "general"],
-                "description": "Intent của tin nhắn người dùng",
+    "type": "function",
+    "function": {
+        "name": "process_request",
+        "description": "Phân tích yêu cầu bảo trì nhà và trả về intent có cấu trúc",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "intent": {
+                    "type": "string",
+                    "enum": ["create_task", "find_repairman", "general"],
+                    "description": "Intent của tin nhắn người dùng",
+                },
+                "task_name": {
+                    "type": "string",
+                    "description": "Tên công việc bảo trì (chỉ dùng cho create_task)",
+                },
+                "cycle_days": {
+                    "type": "integer",
+                    "description": "Số ngày chu kỳ nhắc lại (chỉ dùng cho create_task, mặc định 30)",
+                },
+                "problem_description": {
+                    "type": "string",
+                    "description": "Mô tả sự cố của người dùng (chỉ dùng cho find_repairman)",
+                },
+                "suggested_service_types": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Loại dịch vụ phù hợp để tìm thợ "
+                        "(ví dụ: ['điện', 'nước', 'máy lạnh', 'sơn', 'mộc'])"
+                    ),
+                },
+                "answer": {
+                    "type": "string",
+                    "description": "Câu trả lời cho câu hỏi chung (chỉ dùng cho general)",
+                },
             },
-            "task_name": {
-                "type": "string",
-                "description": "Tên công việc bảo trì (chỉ dùng cho create_task)",
-            },
-            "cycle_days": {
-                "type": "integer",
-                "description": "Số ngày chu kỳ nhắc lại (chỉ dùng cho create_task, mặc định 30)",
-            },
-            "problem_description": {
-                "type": "string",
-                "description": "Mô tả sự cố của người dùng (chỉ dùng cho find_repairman)",
-            },
-            "suggested_service_types": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": (
-                    "Loại dịch vụ phù hợp để tìm thợ "
-                    "(ví dụ: ['điện', 'nước', 'máy lạnh', 'sơn', 'mộc'])"
-                ),
-            },
-            "answer": {
-                "type": "string",
-                "description": "Câu trả lời cho câu hỏi chung (chỉ dùng cho general)",
-            },
+            "required": ["intent"],
         },
-        "required": ["intent"],
     },
 }
 
@@ -68,17 +73,19 @@ _SYSTEM_PROMPT = (
 def analyze_message(user_message: str) -> dict:
     """Return structured intent dict from user's natural-language message."""
     client = _get_client()
-    response = client.messages.create(
-        model="claude-haiku-4-5",
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
         max_tokens=512,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
+        messages=[
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
         tools=[_PROCESS_REQUEST_TOOL],
-        tool_choice={"type": "any"},
+        tool_choice="required",
     )
-    for block in response.content:
-        if block.type == "tool_use" and block.name == "process_request":
-            return block.input
+    message = response.choices[0].message
+    if message.tool_calls:
+        return json.loads(message.tool_calls[0].function.arguments)
     return {
         "intent": "general",
         "answer": "Xin lỗi, tôi không hiểu yêu cầu. Bạn có thể mô tả rõ hơn không?",
