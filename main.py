@@ -27,6 +27,7 @@ from homekeeper.bot.task_handlers import (
     build_edit_conversation,
     list_handler,
 )
+from homekeeper.bot.ai_handlers import build_ai_handler
 from homekeeper.db.connection import open_db
 from homekeeper.scheduler.catchup import run_catchup
 from homekeeper.scheduler.loop import start_scheduler
@@ -68,10 +69,13 @@ def main() -> None:
     db_path = os.environ.get("DB_PATH")
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
 
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+
     missing = [k for k, v in [
         ("ADMIN_USER_ID", admin_id),
         ("DB_PATH", db_path),
         ("TELEGRAM_BOT_TOKEN", token),
+        ("ANTHROPIC_API_KEY", anthropic_key),
     ] if not v]
 
     if missing:
@@ -121,6 +125,9 @@ def main() -> None:
         logger.warning("Catch-up scan failed: %s — continuing", exc)
 
     start_scheduler()
+
+    # AI catch-all handler must be last (lowest priority)
+    application.add_handler(build_ai_handler())
 
     logger.info("HomeKeeper Agent started")
     application.run_polling()
