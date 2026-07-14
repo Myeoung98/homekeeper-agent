@@ -30,9 +30,10 @@ def _is_keep_old(text: str) -> bool:
 
 @admin_only
 async def list_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    household_id = update.effective_chat.id
     conn = context.application.bot_data["db"]
     try:
-        rows = task_repo.get_all_tasks(conn)
+        rows = task_repo.get_all_tasks(conn, household_id)
     except Exception as exc:
         logger.error("Failed to load tasks: %s", exc)
         await update.effective_message.reply_text(
@@ -82,6 +83,7 @@ async def list_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 @admin_only
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["household_id"] = update.effective_chat.id
     await update.effective_message.reply_text(
         "Tên công việc là gì? (ví dụ: Thay lõi lọc nước)"
     )
@@ -136,6 +138,7 @@ async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
     name = context.user_data.get("task_name")
     cycle_days = context.user_data.get("cycle_days")
+    household_id = context.user_data.get("household_id", 0)
     if not name or cycle_days is None:
         await update.effective_message.reply_text(
             "Đã xảy ra lỗi. Vui lòng bắt đầu lại bằng /add."
@@ -144,7 +147,7 @@ async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
     conn = context.application.bot_data["db"]
     try:
-        task_repo.create_task(conn, name, cycle_days, due_date.isoformat())
+        task_repo.create_task(conn, name, cycle_days, due_date.isoformat(), household_id)
     except Exception as exc:
         logger.error("Failed to save task: %s", exc)
         await update.effective_message.reply_text(
@@ -183,9 +186,11 @@ def build_add_conversation() -> ConversationHandler:
 
 @admin_only
 async def edit_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    household_id = update.effective_chat.id
+    context.user_data["household_id"] = household_id
     conn = context.application.bot_data["db"]
     try:
-        rows = task_repo.get_all_tasks(conn)
+        rows = task_repo.get_all_tasks(conn, household_id)
     except Exception as exc:
         logger.error("Failed to load tasks for edit: %s", exc)
         await update.effective_message.reply_text(
@@ -247,9 +252,10 @@ async def receive_edit_select(update: Update, context: ContextTypes.DEFAULT_TYPE
         return EDIT_SELECT
 
     task_id = task_ids[choice - 1]
+    household_id = context.user_data.get("household_id", 0)
     conn = context.application.bot_data["db"]
     try:
-        task = task_repo.get_task_by_id(conn, task_id)
+        task = task_repo.get_task_by_id(conn, task_id, household_id)
     except Exception as exc:
         logger.error("Failed to fetch task: %s", exc)
         await update.effective_message.reply_text(
@@ -338,6 +344,7 @@ async def receive_edit_date(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     task = context.user_data.get("edit_task")
     new_name = context.user_data.get("edit_name")
     new_cycle = context.user_data.get("edit_cycle")
+    household_id = context.user_data.get("household_id", 0)
     if task is None or new_name is None or new_cycle is None:
         await update.effective_message.reply_text(
             "Đã xảy ra lỗi. Vui lòng bắt đầu lại bằng /edit."
@@ -366,7 +373,7 @@ async def receive_edit_date(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     conn = context.application.bot_data["db"]
     try:
-        task_repo.update_task(conn, task["id"], new_name, new_cycle, new_date_str)
+        task_repo.update_task(conn, task["id"], new_name, new_cycle, new_date_str, household_id)
     except Exception as exc:
         logger.error("Failed to update task: %s", exc)
         await update.effective_message.reply_text(
@@ -409,9 +416,11 @@ def build_edit_conversation() -> ConversationHandler:
 
 @admin_only
 async def delete_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    household_id = update.effective_chat.id
+    context.user_data["household_id"] = household_id
     conn = context.application.bot_data["db"]
     try:
-        rows = task_repo.get_all_tasks(conn)
+        rows = task_repo.get_all_tasks(conn, household_id)
     except Exception as exc:
         logger.error("Failed to load tasks for delete: %s", exc)
         await update.effective_message.reply_text(
@@ -471,9 +480,10 @@ async def receive_delete_select(update: Update, context: ContextTypes.DEFAULT_TY
         return DELETE_SELECT
 
     task_id = task_ids[choice - 1]
+    household_id = context.user_data.get("household_id", 0)
     conn = context.application.bot_data["db"]
     try:
-        task = task_repo.get_task_by_id(conn, task_id)
+        task = task_repo.get_task_by_id(conn, task_id, household_id)
     except Exception as exc:
         logger.error("Failed to fetch task: %s", exc)
         await update.effective_message.reply_text(
@@ -503,6 +513,7 @@ async def receive_delete_select(update: Update, context: ContextTypes.DEFAULT_TY
 async def receive_delete_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.effective_message.text.strip()
     task = context.user_data.get("delete_task")
+    household_id = context.user_data.get("household_id", 0)
     if task is None:
         await update.effective_message.reply_text(
             "Đã xảy ra lỗi. Vui lòng bắt đầu lại bằng /delete."
@@ -512,7 +523,7 @@ async def receive_delete_confirm(update: Update, context: ContextTypes.DEFAULT_T
     if text.lower() == "có":
         conn = context.application.bot_data["db"]
         try:
-            task_repo.delete_task(conn, task["id"])
+            task_repo.delete_task(conn, task["id"], household_id)
         except Exception as exc:
             logger.error("Failed to delete task: %s", exc)
             await update.effective_message.reply_text(

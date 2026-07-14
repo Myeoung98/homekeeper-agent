@@ -6,6 +6,7 @@ from telegram import Update
 from telegram.ext import ContextTypes, MessageHandler, filters
 
 from homekeeper.ai.assistant import analyze_message
+from homekeeper.bot import _is_group_chat
 from homekeeper.db.connection import open_db
 from homekeeper.db import member_repo
 from homekeeper.db.repairman_repo import get_all_repairmen
@@ -14,7 +15,15 @@ from homekeeper.db.task_repo import create_task
 logger = logging.getLogger(__name__)
 
 
-def _is_authenticated(user_id: int, conn) -> bool:
+def _is_authenticated(
+    user_id: int,
+    conn,
+    household_id: int = 0,
+    is_group: bool = False,
+) -> bool:
+    # In group chats all members are authenticated
+    if is_group:
+        return True
     admin_id_str = os.environ.get("ADMIN_USER_ID", "")
     try:
         admin_id = int(admin_id_str)
@@ -22,7 +31,7 @@ def _is_authenticated(user_id: int, conn) -> bool:
         admin_id = None
     if admin_id is not None and user_id == admin_id:
         return True
-    members = member_repo.get_all_members(conn)
+    members = member_repo.get_all_members(conn, household_id)
     return any(m["telegram_user_id"] == user_id for m in members)
 
 
@@ -39,12 +48,13 @@ async def ai_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     user_id = update.effective_user.id
     text = update.effective_message.text or ""
+    household_id = update.effective_chat.id if update.effective_chat else 0
 
     conn = context.bot_data.get("db")
     if conn is None:
         conn = open_db()
 
-    if not _is_authenticated(user_id, conn):
+    if not _is_authenticated(user_id, conn, household_id, _is_group_chat(update)):
         return
 
     await context.bot.send_chat_action(
@@ -63,9 +73,9 @@ async def ai_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     intent = result.get("intent", "general")
 
     if intent == "create_task":
-        await _handle_create_task(update, result, conn, user_id)
+        await _handle_create_task(update, result, conn, user_id, household_id)
     elif intent == "find_repairman":
-        await _handle_find_repairman(update, result, conn)
+        await _handle_find_repairman(update, result, conn, household_id)
     else:
         answer = result.get(
             "answer",
@@ -74,7 +84,13 @@ async def ai_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.effective_message.reply_text(f"🏠 {answer}")
 
 
-async def _handle_create_task(update, result, conn, user_id: int) -> None:
+async def _handle_create_task(
+    update,
+    result,
+    conn,
+    user_id: int,
+    household_id: int = 0,
+) -> None:
     if not _is_admin(user_id):
         await update.effective_message.reply_text(
             "⚠️ Chỉ admin mới có thể tạo công việc bảo trì.\n"
@@ -86,7 +102,7 @@ async def _handle_create_task(update, result, conn, user_id: int) -> None:
     cycle_days = int(result.get("cycle_days") or 30)
     next_due = (datetime.now(timezone.utc) + timedelta(days=cycle_days)).strftime("%Y-%m-%d")
 
-    task_id = create_task(conn, task_name, cycle_days, next_due)
+    task_id = create_task(conn, task_name, cycle_days, next_due, household_id)
 
     await update.effective_message.reply_text(
         f"✅ <b>Đã tạo công việc bảo trì!</b>\n\n"
@@ -99,11 +115,16 @@ async def _handle_create_task(update, result, conn, user_id: int) -> None:
     )
 
 
-async def _handle_find_repairman(update, result, conn) -> None:
+async def _handle_find_repairman(
+    update,
+    result,
+    conn,
+    household_id: int = 0,
+) -> None:
     problem = result.get("problem_description", "")
     suggested_types: list[str] = result.get("suggested_service_types") or []
 
-    repairmen = get_all_repairmen(conn)
+    repairmen = get_all_repairmen(conn, household_id)
     if not repairmen:
         await update.effective_message.reply_text(
             "⚠️ Chưa có thợ nào trong hệ thống.\n"

@@ -18,4 +18,16 @@ def open_db() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     schema = Path(__file__).parent / "schema.sql"
     conn.executescript(schema.read_text())
+    # Migration: add household_id to existing tables (idempotent — column already exists is ok)
+    for stmt in [
+        "ALTER TABLE TASK ADD COLUMN household_id INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE MEMBER ADD COLUMN household_id INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE REPAIRMAN ADD COLUMN household_id INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE INCIDENT ADD COLUMN household_id INTEGER NOT NULL DEFAULT 0",
+    ]:
+        try:
+            conn.execute(stmt)
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
     return conn

@@ -8,14 +8,28 @@ from telegram.ext import ContextTypes
 logger = logging.getLogger(__name__)
 
 
+def _is_group_chat(update: Update) -> bool:
+    """Return True if the update comes from a group or supergroup chat."""
+    return update.effective_chat is not None and update.effective_chat.type in (
+        "group",
+        "supergroup",
+    )
+
+
 def admin_only(func):
     """Rejects non-admin callers before the handler runs.
+    In group/supergroup chats all members are considered household members and are allowed.
+    In private chats the ADMIN_USER_ID check is enforced.
     Apply to every CommandHandler callback and ConversationHandler entry point.
     """
     @wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_user is None:
             return
+
+        # Group chats: all members are household members — skip admin check
+        if _is_group_chat(update):
+            return await func(update, context)
 
         admin_id_str = os.environ.get("ADMIN_USER_ID")
         if not admin_id_str:

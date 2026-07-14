@@ -43,8 +43,11 @@ async def handle_reminder_callback(update: Update, context: ContextTypes.DEFAULT
     action, task_id_str, due_date_str = data.split(":", 2)
     task_id = int(task_id_str)
 
+    # Derive household_id from the chat where the button was pressed
+    household_id = update.effective_chat.id if update.effective_chat else 0
+
     conn = context.bot_data["db"]
-    task = task_repo.get_task_by_id(conn, task_id)
+    task = task_repo.get_task_by_id(conn, task_id, household_id)
 
     # Stale check: task deleted or already advanced to next cycle
     if task is None or task["next_due_date"] != due_date_str:
@@ -65,7 +68,7 @@ async def handle_reminder_callback(update: Update, context: ContextTypes.DEFAULT
             "confirm_reminder matched 0 rows for task_id=%d due=%s — proceeding with advance",
             task_id, due_date_str,
         )
-    task_repo.advance_next_due_date(conn, task_id, new_due_date)
+    task_repo.advance_next_due_date(conn, task_id, new_due_date, household_id)
     logger.info(
         "Reminder callback %s: task_id=%d name=%r new_due=%s",
         action, task_id, task["name"], new_due_date,

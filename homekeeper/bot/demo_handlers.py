@@ -15,10 +15,11 @@ logger = logging.getLogger(__name__)
 @admin_only
 async def remind_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a task's D-0 reminder immediately — for demo/testing purposes."""
+    household_id = update.effective_chat.id
     conn = context.application.bot_data["db"]
 
     if not context.args:
-        tasks = task_repo.get_all_tasks(conn)
+        tasks = task_repo.get_all_tasks(conn, household_id)
         if not tasks:
             await update.effective_message.reply_text("Chưa có task nào. Dùng /add để tạo task.")
             return
@@ -35,7 +36,7 @@ async def remind_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.effective_message.reply_text("Dùng: /remind <task_id>")
         return
 
-    task = task_repo.get_task_by_id(conn, task_id)
+    task = task_repo.get_task_by_id(conn, task_id, household_id)
     if task is None:
         await update.effective_message.reply_text(f"Không tìm thấy task ID {task_id}.")
         return
@@ -57,7 +58,7 @@ async def remind_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.effective_message.reply_text(f"Lỗi gửi reminder: {exc}")
         return
 
-    members = member_repo.get_all_members(conn)
+    members = member_repo.get_all_members(conn, household_id)
     for member in members:
         try:
             await context.bot.send_message(
@@ -76,18 +77,23 @@ async def remind_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 @admin_only
 async def status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show a system dashboard — tasks, members, repairmen, incidents."""
+    household_id = update.effective_chat.id
     conn = context.application.bot_data["db"]
     today = date.today()
 
-    tasks = task_repo.get_all_tasks(conn)
+    tasks = task_repo.get_all_tasks(conn, household_id)
     overdue = [t for t in tasks if date.fromisoformat(t["next_due_date"]) < today]
     due_today = [t for t in tasks if date.fromisoformat(t["next_due_date"]) == today]
     upcoming = [t for t in tasks if date.fromisoformat(t["next_due_date"]) > today]
 
-    members = member_repo.get_all_members(conn)
+    members = member_repo.get_all_members(conn, household_id)
 
-    repairman_count = conn.execute("SELECT COUNT(*) as cnt FROM REPAIRMAN").fetchone()["cnt"]
-    incident_count = conn.execute("SELECT COUNT(*) as cnt FROM INCIDENT").fetchone()["cnt"]
+    repairman_count = conn.execute(
+        "SELECT COUNT(*) as cnt FROM REPAIRMAN WHERE household_id = ?", (household_id,)
+    ).fetchone()["cnt"]
+    incident_count = conn.execute(
+        "SELECT COUNT(*) as cnt FROM INCIDENT WHERE household_id = ?", (household_id,)
+    ).fetchone()["cnt"]
 
     lines = [
         "📊 <b>HomeKeeper — Tổng quan hệ thống</b>\n",

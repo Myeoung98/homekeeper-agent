@@ -10,6 +10,7 @@ from telegram.ext import (
     filters,
 )
 
+from homekeeper.bot import _is_group_chat
 from homekeeper.db import incident_repo, member_repo, repairman_repo
 from homekeeper.domain import matching
 
@@ -21,7 +22,10 @@ INCIDENT_YES_PATTERN = r'^incident_yes:\d+$'
 INCIDENT_NO_PATTERN = r'^incident_no$'
 
 
-def _is_authenticated(user_id: int, conn) -> bool:
+def _is_authenticated(user_id: int, conn, household_id: int = 0, is_group: bool = False) -> bool:
+    # In group chats all members are authenticated
+    if is_group:
+        return True
     admin_id_str = os.environ.get("ADMIN_USER_ID", "")
     try:
         admin_id = int(admin_id_str)
@@ -30,7 +34,7 @@ def _is_authenticated(user_id: int, conn) -> bool:
         admin_id = None
     if admin_id is not None and user_id == admin_id:
         return True
-    members = member_repo.get_all_members(conn)
+    members = member_repo.get_all_members(conn, household_id)
     return any(m["telegram_user_id"] == user_id for m in members)
 
 
@@ -38,10 +42,12 @@ async def incident_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     if update.effective_user is None:
         return ConversationHandler.END
     user_id = update.effective_user.id
+    household_id = update.effective_chat.id
     conn = context.application.bot_data["db"]
-    if not _is_authenticated(user_id, conn):
+    if not _is_authenticated(user_id, conn, household_id, _is_group_chat(update)):
         await update.effective_message.reply_text("Bạn không có quyền sử dụng bot này.")
         return ConversationHandler.END
+    context.user_data["household_id"] = household_id
     await update.effective_message.reply_text(
         "Mô tả sự cố: (ví dụ: điều hòa phòng ngủ không mát)"
     )
@@ -57,9 +63,12 @@ async def receive_description(update: Update, context: ContextTypes.DEFAULT_TYPE
     if update.effective_user is None:
         return ConversationHandler.END
     user_id = update.effective_user.id
+    household_id = context.user_data.get("household_id", 0)
     conn = context.application.bot_data["db"]
     try:
-        incident_id = incident_repo.create_incident(conn, reported_by=user_id, description=text)
+        incident_id = incident_repo.create_incident(
+            conn, reported_by=user_id, description=text, household_id=household_id
+        )
     except Exception as exc:
         logger.error("Failed to save incident: %s", exc)
         await update.effective_message.reply_text("Không thể lưu sự cố. Vui lòng thử lại.")
@@ -92,15 +101,18 @@ async def incident_yes_callback(update: Update, context: ContextTypes.DEFAULT_TY
     if update.effective_user is None:
         return
 
+    household_id = update.effective_chat.id if update.effective_chat else 0
     conn = context.application.bot_data["db"]
 
-    if not _is_authenticated(update.effective_user.id, conn):
+    if not _is_authenticated(
+        update.effective_user.id, conn, household_id, _is_group_chat(update)
+    ):
         if query.message is not None:
             await query.message.edit_text("Bạn không có quyền sử dụng bot này.")
         return
 
     try:
-        incident = incident_repo.get_incident_by_id(conn, incident_id)
+        incident = incident_repo.get_incident_by_id(conn, incident_id, household_id)
     except Exception as exc:
         logger.error("Failed to load incident %s: %s", incident_id, exc)
         if query.message is not None:
@@ -113,7 +125,7 @@ async def incident_yes_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     try:
-        repairmen = repairman_repo.get_all_repairmen(conn)
+        repairmen = repairman_repo.get_all_repairmen(conn, household_id)
     except Exception as exc:
         logger.error("Failed to load repairmen: %s", exc)
         if query.message is not None:

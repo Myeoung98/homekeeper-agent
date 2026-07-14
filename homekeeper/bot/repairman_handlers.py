@@ -11,6 +11,7 @@ from telegram.ext import (
     filters,
 )
 
+from homekeeper.bot import _is_group_chat
 from homekeeper.db import repairman_repo
 
 logger = logging.getLogger(__name__)
@@ -27,13 +28,19 @@ def _is_keep_old(text: str) -> bool:
 async def repairman_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.effective_user is None:
         return ConversationHandler.END
-    try:
-        admin_id = int(os.environ.get("ADMIN_USER_ID", "0"))
-    except ValueError:
-        return ConversationHandler.END
-    if update.effective_user.id != admin_id:
-        await update.effective_message.reply_text("Bạn không có quyền quản lý danh bạ thợ.")
-        return ConversationHandler.END
+
+    # Group chats: all members are household members — skip admin check
+    if not _is_group_chat(update):
+        try:
+            admin_id = int(os.environ.get("ADMIN_USER_ID", "0"))
+        except ValueError:
+            return ConversationHandler.END
+        if update.effective_user.id != admin_id:
+            await update.effective_message.reply_text("Bạn không có quyền quản lý danh bạ thợ.")
+            return ConversationHandler.END
+
+    household_id = update.effective_chat.id
+    context.user_data["household_id"] = household_id
 
     sub = (context.args or [""])[0].lower()
 
@@ -60,9 +67,10 @@ async def repairman_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 async def _list_repairmen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    household_id = context.user_data.get("household_id", 0)
     conn = context.application.bot_data["db"]
     try:
-        rows = repairman_repo.get_all_repairmen(conn)
+        rows = repairman_repo.get_all_repairmen(conn, household_id)
     except Exception as exc:
         logger.error("Failed to load repairmen: %s", exc)
         await update.effective_message.reply_text(
@@ -117,6 +125,7 @@ async def receive_add_service(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     name = context.user_data.get("add_name")
     phone = context.user_data.get("add_phone")
+    household_id = context.user_data.get("household_id", 0)
     if not name or not phone:
         await update.effective_message.reply_text(
             "Đã xảy ra lỗi. Vui lòng bắt đầu lại bằng /repairman add."
@@ -125,7 +134,7 @@ async def receive_add_service(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     conn = context.application.bot_data["db"]
     try:
-        repairman_repo.create_repairman(conn, name, phone, service_type)
+        repairman_repo.create_repairman(conn, name, phone, service_type, household_id)
     except Exception as exc:
         logger.error("Failed to save repairman: %s", exc)
         await update.effective_message.reply_text(
@@ -144,9 +153,10 @@ async def receive_add_service(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def _start_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    household_id = context.user_data.get("household_id", 0)
     conn = context.application.bot_data["db"]
     try:
-        rows = repairman_repo.get_all_repairmen(conn)
+        rows = repairman_repo.get_all_repairmen(conn, household_id)
     except Exception as exc:
         logger.error("Failed to load repairmen for edit: %s", exc)
         await update.effective_message.reply_text(
@@ -187,9 +197,10 @@ async def receive_edit_select(update: Update, context: ContextTypes.DEFAULT_TYPE
         return EDIT_SELECT
 
     repairman_id = repairman_ids[choice - 1]
+    household_id = context.user_data.get("household_id", 0)
     conn = context.application.bot_data["db"]
     try:
-        row = repairman_repo.get_repairman_by_id(conn, repairman_id)
+        row = repairman_repo.get_repairman_by_id(conn, repairman_id, household_id)
     except Exception as exc:
         logger.error("Failed to fetch repairman: %s", exc)
         await update.effective_message.reply_text(
@@ -252,6 +263,7 @@ async def receive_edit_service(update: Update, context: ContextTypes.DEFAULT_TYP
     repairman = context.user_data.get("edit_repairman")
     new_name = context.user_data.get("edit_name")
     new_phone = context.user_data.get("edit_phone")
+    household_id = context.user_data.get("household_id", 0)
     if repairman is None or new_name is None or new_phone is None:
         await update.effective_message.reply_text(
             "Đã xảy ra lỗi. Vui lòng bắt đầu lại bằng /repairman edit."
@@ -261,7 +273,9 @@ async def receive_edit_service(update: Update, context: ContextTypes.DEFAULT_TYP
     new_service = repairman["service_type"] if _is_keep_old(text) else text
     conn = context.application.bot_data["db"]
     try:
-        repairman_repo.update_repairman(conn, repairman["id"], new_name, new_phone, new_service)
+        repairman_repo.update_repairman(
+            conn, repairman["id"], new_name, new_phone, new_service, household_id
+        )
     except Exception as exc:
         logger.error("Failed to update repairman: %s", exc)
         await update.effective_message.reply_text(
@@ -280,9 +294,10 @@ async def receive_edit_service(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def _start_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    household_id = context.user_data.get("household_id", 0)
     conn = context.application.bot_data["db"]
     try:
-        rows = repairman_repo.get_all_repairmen(conn)
+        rows = repairman_repo.get_all_repairmen(conn, household_id)
     except Exception as exc:
         logger.error("Failed to load repairmen for delete: %s", exc)
         await update.effective_message.reply_text(
@@ -323,9 +338,10 @@ async def receive_delete_select(update: Update, context: ContextTypes.DEFAULT_TY
         return DELETE_SELECT
 
     repairman_id = repairman_ids[choice - 1]
+    household_id = context.user_data.get("household_id", 0)
     conn = context.application.bot_data["db"]
     try:
-        row = repairman_repo.get_repairman_by_id(conn, repairman_id)
+        row = repairman_repo.get_repairman_by_id(conn, repairman_id, household_id)
     except Exception as exc:
         logger.error("Failed to fetch repairman: %s", exc)
         await update.effective_message.reply_text(
@@ -350,6 +366,7 @@ async def receive_delete_select(update: Update, context: ContextTypes.DEFAULT_TY
 async def receive_delete_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.effective_message.text.strip()
     repairman = context.user_data.get("delete_repairman")
+    household_id = context.user_data.get("household_id", 0)
     if repairman is None:
         await update.effective_message.reply_text(
             "Đã xảy ra lỗi. Vui lòng bắt đầu lại bằng /repairman delete."
@@ -359,7 +376,7 @@ async def receive_delete_confirm(update: Update, context: ContextTypes.DEFAULT_T
     if text.lower() == "có":
         conn = context.application.bot_data["db"]
         try:
-            repairman_repo.delete_repairman(conn, repairman["id"])
+            repairman_repo.delete_repairman(conn, repairman["id"], household_id)
         except Exception as exc:
             logger.error("Failed to delete repairman: %s", exc)
             await update.effective_message.reply_text(

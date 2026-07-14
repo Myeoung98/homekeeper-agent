@@ -28,6 +28,8 @@ from homekeeper.bot.task_handlers import (
     list_handler,
 )
 from homekeeper.bot.ai_handlers import build_ai_handler
+from homekeeper.bot.photo_handlers import build_photo_handler
+from homekeeper.bot.onboarding_handlers import build_onboarding_handler
 from homekeeper.db.connection import open_db
 from homekeeper.scheduler.catchup import run_catchup
 from homekeeper.scheduler.loop import start_scheduler
@@ -42,24 +44,24 @@ logger = logging.getLogger(__name__)
 @admin_only
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_text(
-        "🏠 <b>HomeKeeper Agent</b> đang hoạt động!\n\n"
+        "🏠 <b>HomeKeeper Agent</b> — Trợ lý nhà thông minh\n\n"
+        "🤖 <b>AI tự nhiên</b>\n"
+        "  💬 Nhắn text bất kỳ — bot tự hiểu\n"
+        "  📸 Gửi ảnh hỏng hóc — bot nhận dạng & gợi ý thợ\n\n"
         "📋 <b>Quản lý công việc</b>\n"
-        "  /add — Thêm công việc bảo trì\n"
+        "  /add — Thêm lịch bảo trì\n"
         "  /list — Xem danh sách\n"
-        "  /edit — Sửa công việc\n"
-        "  /delete — Xóa công việc\n\n"
-        "👥 <b>Thành viên gia đình</b>\n"
-        "  /member add — Thêm thành viên\n"
-        "  /member list — Xem danh sách\n"
-        "  /member remove — Xóa thành viên\n\n"
+        "  /edit — Sửa   /delete — Xóa\n\n"
         "🔧 <b>Thợ sửa chữa</b>\n"
-        "  /repairman add — Thêm thợ\n"
-        "  /repairman list — Xem danh sách\n\n"
+        "  /repairman add | list\n\n"
+        "👥 <b>Thành viên</b>\n"
+        "  /member add | list | remove\n\n"
         "🚨 <b>Báo sự cố</b>\n"
-        "  /incident — Báo sự cố & tìm thợ\n\n"
+        "  /incident — Mô tả & tìm thợ phù hợp\n\n"
         "📊 <b>Tổng quan</b>\n"
-        "  /status — Dashboard hệ thống\n"
-        "  /remind &lt;id&gt; — Gửi reminder ngay",
+        "  /status — Dashboard\n"
+        "  /remind &lt;id&gt; — Gửi reminder ngay\n\n"
+        "<i>👥 Thêm bot vào group gia đình để cả nhà cùng dùng!</i>",
         parse_mode="HTML",
     )
 
@@ -126,7 +128,13 @@ def main() -> None:
 
     start_scheduler()
 
-    # AI catch-all handler must be last (lowest priority)
+    # Group onboarding — fires when bot is added to a group
+    application.add_handler(build_onboarding_handler())
+
+    # Photo analysis — before AI text catch-all
+    application.add_handler(build_photo_handler())
+
+    # AI text catch-all must be last (lowest priority)
     application.add_handler(build_ai_handler())
 
     logger.info("HomeKeeper Agent started")

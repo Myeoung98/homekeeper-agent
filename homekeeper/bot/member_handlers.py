@@ -11,6 +11,7 @@ from telegram.ext import (
     filters,
 )
 
+from homekeeper.bot import _is_group_chat
 from homekeeper.db import member_repo
 
 logger = logging.getLogger(__name__)
@@ -21,13 +22,19 @@ ASK_ADD_ID, ASK_ADD_NAME, REMOVE_SELECT, REMOVE_CONFIRM = range(4)
 async def member_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.effective_user is None:
         return ConversationHandler.END
-    try:
-        admin_id = int(os.environ.get("ADMIN_USER_ID", "0"))
-    except ValueError:
-        return ConversationHandler.END
-    if update.effective_user.id != admin_id:
-        await update.effective_message.reply_text("Bạn không có quyền quản lý thành viên.")
-        return ConversationHandler.END
+
+    # Group chats: all members are household members — skip admin check
+    if not _is_group_chat(update):
+        try:
+            admin_id = int(os.environ.get("ADMIN_USER_ID", "0"))
+        except ValueError:
+            return ConversationHandler.END
+        if update.effective_user.id != admin_id:
+            await update.effective_message.reply_text("Bạn không có quyền quản lý thành viên.")
+            return ConversationHandler.END
+
+    household_id = update.effective_chat.id
+    context.user_data["household_id"] = household_id
 
     sub = (context.args or [""])[0].lower()
 
@@ -53,9 +60,10 @@ async def member_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def _list_members(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    household_id = context.user_data.get("household_id", 0)
     conn = context.application.bot_data["db"]
     try:
-        rows = member_repo.get_all_members(conn)
+        rows = member_repo.get_all_members(conn, household_id)
     except Exception as exc:
         logger.error("Failed to load members: %s", exc)
         await update.effective_message.reply_text(
@@ -94,9 +102,10 @@ async def receive_add_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
         return ASK_ADD_ID
 
+    household_id = context.user_data.get("household_id", 0)
     conn = context.application.bot_data["db"]
     try:
-        existing = member_repo.get_member_by_telegram_id(conn, telegram_user_id)
+        existing = member_repo.get_member_by_telegram_id(conn, telegram_user_id, household_id)
     except Exception as exc:
         logger.error("Failed to check member existence: %s", exc)
         await update.effective_message.reply_text(
@@ -120,6 +129,7 @@ async def receive_add_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return ASK_ADD_NAME
 
     telegram_user_id = context.user_data.get("add_telegram_id")
+    household_id = context.user_data.get("household_id", 0)
     if telegram_user_id is None:
         await update.effective_message.reply_text(
             "Đã xảy ra lỗi. Vui lòng bắt đầu lại bằng /member add."
@@ -128,7 +138,7 @@ async def receive_add_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     conn = context.application.bot_data["db"]
     try:
-        member_repo.add_member(conn, telegram_user_id, name)
+        member_repo.add_member(conn, telegram_user_id, name, household_id)
     except Exception as exc:
         logger.error("Failed to save member: %s", exc)
         await update.effective_message.reply_text(
@@ -147,9 +157,10 @@ async def receive_add_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def _start_remove(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    household_id = context.user_data.get("household_id", 0)
     conn = context.application.bot_data["db"]
     try:
-        rows = member_repo.get_all_members(conn)
+        rows = member_repo.get_all_members(conn, household_id)
     except Exception as exc:
         logger.error("Failed to load members for remove: %s", exc)
         await update.effective_message.reply_text(
@@ -196,9 +207,10 @@ async def receive_remove_select(update: Update, context: ContextTypes.DEFAULT_TY
         return REMOVE_SELECT
 
     member_id = member_ids[choice - 1]
+    household_id = context.user_data.get("household_id", 0)
     conn = context.application.bot_data["db"]
     try:
-        row = member_repo.get_member_by_id(conn, member_id)
+        row = member_repo.get_member_by_id(conn, member_id, household_id)
     except Exception as exc:
         logger.error("Failed to fetch member: %s", exc)
         await update.effective_message.reply_text(
@@ -227,6 +239,7 @@ async def receive_remove_select(update: Update, context: ContextTypes.DEFAULT_TY
 async def receive_remove_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.effective_message.text.strip()
     member = context.user_data.get("remove_member")
+    household_id = context.user_data.get("household_id", 0)
     if member is None:
         await update.effective_message.reply_text(
             "Đã xảy ra lỗi. Vui lòng bắt đầu lại bằng /member remove."
@@ -236,7 +249,7 @@ async def receive_remove_confirm(update: Update, context: ContextTypes.DEFAULT_T
     if text.lower() == "có":
         conn = context.application.bot_data["db"]
         try:
-            member_repo.delete_member(conn, member["id"])
+            member_repo.delete_member(conn, member["id"], household_id)
         except Exception as exc:
             logger.error("Failed to delete member: %s", exc)
             await update.effective_message.reply_text(
