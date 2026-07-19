@@ -82,9 +82,9 @@ _PHOTO_PROMPT = (
 
 
 _VISION_MODELS = [
-    "qwen/qwen2-vl-7b-instruct:free",
-    "google/gemini-2.0-flash-exp:free",
-    "qwen/qwen-2-vl-72b-instruct:free",
+    "nvidia/nemotron-nano-12b-v2-vl:free",
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
 ]
 
 
@@ -128,8 +128,8 @@ def analyze_photo(photo_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
             data = _call_openrouter_vision(model, b64, mime_type, api_key)
             break
         except RuntimeError as e:
-            # 404 = model not available, try next; other errors re-raise immediately
-            if "HTTP 404" in str(e):
+            # 404/400 = model not available/invalid, try next; other errors re-raise
+            if "HTTP 404" in str(e) or "HTTP 400" in str(e):
                 last_error = e
                 continue
             raise
