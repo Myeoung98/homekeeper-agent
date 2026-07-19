@@ -1,17 +1,18 @@
 import base64
 import json
 import os
+import urllib.request
 
 from groq import Groq
 
-_client: Groq | None = None
+_groq_client: Groq | None = None
 
 
-def _get_client() -> Groq:
-    global _client
-    if _client is None:
-        _client = Groq(api_key=os.environ["GROQ_API_KEY"])
-    return _client
+def _get_groq() -> Groq:
+    global _groq_client
+    if _groq_client is None:
+        _groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
+    return _groq_client
 
 
 _PROCESS_REQUEST_TOOL = {
@@ -70,44 +71,45 @@ _SYSTEM_PROMPT = (
     "  → Điền answer bằng tiếng Việt, ngắn gọn và hữu ích"
 )
 
-
 _PHOTO_PROMPT = (
     "Bạn là HomeKeeper AI. Người dùng gửi ảnh về một vấn đề trong nhà.\n"
-    "Hãy phân tích ảnh và trả về JSON với cấu trúc sau:\n"
-    "{\n"
-    '  "problem": "<mô tả ngắn vấn đề bằng tiếng Việt>",\n'
-    '  "severity": "low|medium|high",\n'
-    '  "service_types": ["<loại thợ 1>", "<loại thợ 2>"],\n'
-    '  "advice": "<lời khuyên xử lý tạm thời hoặc ghi chú>"\n'
-    "}\n"
-    "Chỉ trả về JSON, không thêm gì khác.\n"
-    "service_types ví dụ: điện, nước, máy lạnh, sơn, mộc, khóa, kính, trần thạch cao, máy bơm."
+    "Phân tích ảnh và trả về JSON (chỉ JSON, không thêm gì khác):\n"
+    '{"problem":"<mô tả ngắn vấn đề tiếng Việt>","severity":"low|medium|high",'
+    '"service_types":["<loại thợ>"],"advice":"<lời khuyên tạm thời>"}\n'
+    "service_types ví dụ: điện, nước, máy lạnh, sơn, mộc, khóa, kính, trần thạch cao."
 )
 
 
 def analyze_photo(photo_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
-    """Analyze a photo of a home problem and return structured assessment."""
-    client = _get_client()
+    """Analyze a photo using OpenRouter vision model (stdlib urllib, no extra deps)."""
     b64 = base64.b64encode(photo_bytes).decode()
-    response = client.chat.completions.create(
-        model="meta-llama/llama-4-scout-17b-16e-instruct",
-        max_tokens=256,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:{mime_type};base64,{b64}"},
-                    },
-                    {"type": "text", "text": _PHOTO_PROMPT},
-                ],
-            }
-        ],
+    api_key = os.environ["OPENROUTER_API_KEY"]
+
+    payload = json.dumps({
+        "model": "meta-llama/llama-3.2-11b-vision-instruct:free",
+        "max_tokens": 300,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}},
+                {"type": "text", "text": _PHOTO_PROMPT},
+            ],
+        }],
+    }).encode()
+
+    req = urllib.request.Request(
+        "https://openrouter.ai/api/v1/chat/completions",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://homekeeper-bot.app",
+        },
     )
-    text = response.choices[0].message.content or ""
-    # Strip markdown code fences if present
-    text = text.strip()
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        data = json.loads(resp.read())
+
+    text = (data["choices"][0]["message"]["content"] or "").strip()
     if text.startswith("```"):
         text = text.split("```")[1]
         if text.startswith("json"):
@@ -125,7 +127,7 @@ def analyze_photo(photo_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
 
 def analyze_message(user_message: str) -> dict:
     """Return structured intent dict from user's natural-language message."""
-    client = _get_client()
+    client = _get_groq()
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         max_tokens=512,

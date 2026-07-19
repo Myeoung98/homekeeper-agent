@@ -72,12 +72,14 @@ def main() -> None:
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
 
     groq_key = os.environ.get("GROQ_API_KEY")
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY")
 
     missing = [k for k, v in [
         ("ADMIN_USER_ID", admin_id),
         ("DB_PATH", db_path),
         ("TELEGRAM_BOT_TOKEN", token),
         ("GROQ_API_KEY", groq_key),
+        ("OPENROUTER_API_KEY", openrouter_key),
     ] if not v]
 
     if missing:
