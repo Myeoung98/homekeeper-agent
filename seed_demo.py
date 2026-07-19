@@ -3,8 +3,11 @@ Demo data seed script for HomeKeeper Agent investor demo.
 Run once: python seed_demo.py
 Idempotent: safe to run multiple times (skips existing records).
 """
-from dotenv import load_dotenv
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # Railway already has env vars set
 
 import sqlite3
 import os
