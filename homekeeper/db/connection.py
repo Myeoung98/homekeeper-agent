@@ -30,4 +30,7 @@ def open_db() -> sqlite3.Connection:
             conn.commit()
         except sqlite3.OperationalError:
             pass
+
+    from homekeeper.db.seed import seed_if_empty
+    seed_if_empty(conn)
     return conn
