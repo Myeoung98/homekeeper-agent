@@ -2,10 +2,13 @@ from dotenv import load_dotenv
 
 load_dotenv()  # must run before any os.environ access
 
+import asyncio
 import logging
 import os
 import sys
+import threading
 
+import uvicorn
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes
 
@@ -30,6 +33,7 @@ from homekeeper.bot.task_handlers import (
 from homekeeper.bot.ai_handlers import build_ai_handler
 from homekeeper.bot.photo_handlers import build_photo_handler
 from homekeeper.bot.onboarding_handlers import build_onboarding_handler
+from homekeeper.dashboard.app import create_app as create_dashboard
 from homekeeper.db.connection import open_db
 from homekeeper.scheduler.catchup import run_catchup
 from homekeeper.scheduler.loop import start_scheduler
@@ -138,6 +142,17 @@ def main() -> None:
 
     # AI text catch-all must be last (lowest priority)
     application.add_handler(build_ai_handler())
+
+    # Start web dashboard in a background thread
+    port = int(os.environ.get("PORT", 8080))
+    dash_app = create_dashboard()
+
+    def _run_dashboard():
+        uvicorn.run(dash_app, host="0.0.0.0", port=port, log_level="warning")
+
+    dashboard_thread = threading.Thread(target=_run_dashboard, daemon=True)
+    dashboard_thread.start()
+    logger.info("Dashboard running on port %d", port)
 
     logger.info("HomeKeeper Agent started")
     application.run_polling()
