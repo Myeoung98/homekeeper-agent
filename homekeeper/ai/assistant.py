@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import urllib.error
 import urllib.request
 
 from groq import Groq
@@ -106,8 +107,12 @@ def analyze_photo(photo_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
             "HTTP-Referer": "https://homekeeper-bot.app",
         },
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        data = json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="replace")
+        raise RuntimeError(f"OpenRouter HTTP {e.code}: {body[:300]}") from e
 
     text = (data["choices"][0]["message"]["content"] or "").strip()
     if text.startswith("```"):

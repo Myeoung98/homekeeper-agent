@@ -56,9 +56,10 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         result = analyze_photo(bytes(photo_bytes))
     except Exception as exc:
-        logger.error("Photo analysis failed: %s", exc)
+        logger.error("Photo analysis failed: %s", exc, exc_info=True)
         await update.effective_message.reply_text(
-            "❌ Không thể phân tích ảnh. Vui lòng thử lại hoặc mô tả vấn đề bằng text."
+            f"❌ Lỗi phân tích ảnh: {type(exc).__name__}: {exc}\n\n"
+            "Vui lòng mô tả vấn đề bằng text."
         )
         return
 
