@@ -81,13 +81,16 @@ _PHOTO_PROMPT = (
 )
 
 
-def analyze_photo(photo_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
-    """Analyze a photo using OpenRouter vision model (stdlib urllib, no extra deps)."""
-    b64 = base64.b64encode(photo_bytes).decode()
-    api_key = os.environ["OPENROUTER_API_KEY"]
+_VISION_MODELS = [
+    "qwen/qwen2-vl-7b-instruct:free",
+    "google/gemini-2.0-flash-exp:free",
+    "qwen/qwen-2-vl-72b-instruct:free",
+]
 
+
+def _call_openrouter_vision(model: str, b64: str, mime_type: str, api_key: str) -> dict:
     payload = json.dumps({
-        "model": "meta-llama/llama-3.2-11b-vision-instruct:free",
+        "model": model,
         "max_tokens": 300,
         "messages": [{
             "role": "user",
@@ -97,7 +100,6 @@ def analyze_photo(photo_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
             ],
         }],
     }).encode()
-
     req = urllib.request.Request(
         "https://openrouter.ai/api/v1/chat/completions",
         data=payload,
@@ -109,10 +111,30 @@ def analyze_photo(photo_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read())
+            return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         body = e.read().decode(errors="replace")
-        raise RuntimeError(f"OpenRouter HTTP {e.code}: {body[:300]}") from e
+        raise RuntimeError(f"OpenRouter HTTP {e.code} ({model}): {body[:300]}") from e
+
+
+def analyze_photo(photo_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
+    """Analyze a photo using OpenRouter vision model (stdlib urllib, no extra deps)."""
+    b64 = base64.b64encode(photo_bytes).decode()
+    api_key = os.environ["OPENROUTER_API_KEY"]
+
+    last_error: Exception | None = None
+    for model in _VISION_MODELS:
+        try:
+            data = _call_openrouter_vision(model, b64, mime_type, api_key)
+            break
+        except RuntimeError as e:
+            # 404 = model not available, try next; other errors re-raise immediately
+            if "HTTP 404" in str(e):
+                last_error = e
+                continue
+            raise
+    else:
+        raise RuntimeError(f"No vision model available. Last error: {last_error}") from last_error
 
     text = (data["choices"][0]["message"]["content"] or "").strip()
     if text.startswith("```"):
