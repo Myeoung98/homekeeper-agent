@@ -1,7 +1,8 @@
+import asyncio
 import html
 import logging
 import os
-from datetime import date
+from datetime import date, timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CommandHandler, ContextTypes
@@ -149,8 +150,141 @@ async def status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
+async def _typing(update: Update, seconds: float = 1.5) -> None:
+    await update.effective_chat.send_action("typing")
+    await asyncio.sleep(seconds)
+
+
+async def demo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Scripted investor demo walkthrough — /demo"""
+    conn = context.application.bot_data["db"]
+    today = date.today()
+    chat_id = update.effective_chat.id
+
+    # ── Gather real stats ──────────────────────────────────────────────
+    households = conn.execute(
+        "SELECT COUNT(DISTINCT household_id) FROM TASK WHERE household_id != 0"
+    ).fetchone()[0]
+    total_tasks = conn.execute("SELECT COUNT(*) FROM TASK").fetchone()[0]
+    overdue = conn.execute(
+        "SELECT COUNT(*) FROM TASK WHERE next_due_date < ?", (today.isoformat(),)
+    ).fetchone()[0]
+    repairmen = conn.execute("SELECT COUNT(*) FROM REPAIRMAN").fetchone()[0]
+    incidents = conn.execute("SELECT COUNT(*) FROM INCIDENT").fetchone()[0]
+    members = conn.execute("SELECT COUNT(*) FROM MEMBER").fetchone()[0]
+
+    score = max(0, 100 - overdue * 8 - min(incidents, 5) * 3)
+    score_emoji = "🟢" if score >= 80 else "🟡" if score >= 60 else "🔴"
+
+    # Sample repairman from DB (for realistic AI response)
+    sample_repairman = conn.execute(
+        "SELECT name, phone, service_type FROM REPAIRMAN WHERE service_type LIKE '%máy lạnh%' LIMIT 1"
+    ).fetchone()
+    if not sample_repairman:
+        sample_repairman = conn.execute(
+            "SELECT name, phone, service_type FROM REPAIRMAN LIMIT 1"
+        ).fetchone()
+
+    due_date_example = (today + timedelta(days=30)).strftime("%d/%m/%Y")
+
+    # ── Step 1: Intro ──────────────────────────────────────────────────
+    await _typing(update, 1.0)
+    await update.effective_message.reply_text(
+        "🏠 <b>HomeKeeper Agent — Demo</b>\n\n"
+        "Nền tảng quản lý bảo trì nhà thông minh.\n"
+        "AI-Powered · Multi-tenant · Telegram-native · Zero app install\n\n"
+        "<i>Demo sẽ chạy tự động, mỗi bước cách nhau vài giây...</i>",
+        parse_mode="HTML",
+    )
+
+    # ── Step 2: Platform stats ─────────────────────────────────────────
+    await _typing(update, 2.0)
+    await update.effective_message.reply_text(
+        "📊 <b>Platform Overview — Live Data</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"🏘️  Hộ gia đình đang dùng: <b>{households}</b>\n"
+        f"📋  Công việc đang theo dõi: <b>{total_tasks}</b>\n"
+        f"🔧  Thợ sửa chữa trong hệ thống: <b>{repairmen}</b>\n"
+        f"👥  Thành viên gia đình: <b>{members}</b>\n"
+        f"🚨  Sự cố đã xử lý: <b>{incidents}</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"{score_emoji} <b>Health Score: {score}/100</b>\n\n"
+        "<i>↑ Data thật, cập nhật real-time từ tất cả hộ gia đình</i>",
+        parse_mode="HTML",
+    )
+
+    # ── Step 3: AI photo analysis (scripted but realistic) ─────────────
+    await _typing(update, 2.5)
+    repairman_line = ""
+    if sample_repairman:
+        repairman_line = (
+            f"\n🔧 <b>Thợ gợi ý tự động:</b>\n"
+            f"  👤 <b>{html.escape(sample_repairman[0])}</b> "
+            f"— 📞 {sample_repairman[1]} ({sample_repairman[2]})"
+        )
+    await update.effective_message.reply_text(
+        "📸 <b>Tính năng 1: AI Phân tích ảnh</b>\n\n"
+        "<i>Người dùng chụp ảnh điều hòa hỏng và gửi lên → Bot phân tích:</i>\n\n"
+        "🏠 <b>Kết quả phân tích ảnh</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🔍 <b>Vấn đề:</b> Máy lạnh không làm lạnh, lọc bẩn hoặc thiếu gas\n"
+        "🟠 <b>Mức độ:</b> Trung bình\n"
+        "💡 <b>Khuyến nghị:</b> Vệ sinh lọc, kiểm tra áp suất gas, gọi thợ nếu vẫn không cải thiện"
+        f"{repairman_line}\n\n"
+        "<i>✦ Dùng OpenRouter Vision AI · Phân tích trong &lt;5 giây</i>",
+        parse_mode="HTML",
+    )
+
+    # ── Step 4: NLP demo ──────────────────────────────────────────────
+    await _typing(update, 2.5)
+    await update.effective_message.reply_text(
+        "💬 <b>Tính năng 2: Ngôn ngữ tự nhiên</b>\n\n"
+        "Người dùng nhắn:\n"
+        "  <i>\"nhắc tôi vệ sinh máy lạnh sau 30 ngày\"</i>\n\n"
+        "Bot tự động xử lý:\n"
+        f"  ✅ Tạo task: <b>Vệ sinh máy lạnh</b>\n"
+        f"  📅 Ngày nhắc: <b>{due_date_example}</b>\n"
+        f"  🔔 Reminder tự động gửi đúng ngày cho cả nhà\n\n"
+        "Hoặc: <i>\"điều hòa phòng khách không mát\"</i>\n"
+        f"  → Bot tìm thợ máy lạnh phù hợp và gợi ý ngay\n\n"
+        "<i>✦ Dùng Groq llama-3.3-70b · Không cần form, không cần app</i>",
+        parse_mode="HTML",
+    )
+
+    # ── Step 5: Multi-tenant pitch ────────────────────────────────────
+    await _typing(update, 2.0)
+    await update.effective_message.reply_text(
+        "👥 <b>Tính năng 3: Multi-tenant tự động</b>\n\n"
+        "  Mỗi group Telegram = 1 hộ gia đình riêng biệt\n"
+        "  Dữ liệu hoàn toàn tách biệt giữa các hộ\n"
+        "  Không cần đăng ký, không cần cài app\n\n"
+        "<b>Scale:</b>\n"
+        "  1 bot → vô số hộ gia đình\n"
+        "  1 server → toàn bộ fleet\n"
+        "  Chi phí infra tăng tuyến tính theo usage\n\n"
+        "<i>✦ Phù hợp B2C (cá nhân) và B2B (property management, chung cư)</i>",
+        parse_mode="HTML",
+    )
+
+    # ── Step 6: CTA ───────────────────────────────────────────────────
+    await _typing(update, 1.5)
+    dashboard_url = os.environ.get("DASHBOARD_URL", "Railway URL của bạn")
+    await update.effective_message.reply_text(
+        "🚀 <b>HomeKeeper Agent</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "<b>Stack:</b> Python · FastAPI · Telegram Bot API\n"
+        "<b>AI:</b> Groq llama-3.3-70b + OpenRouter Vision\n"
+        "<b>Deploy:</b> Railway · SQLite · Zero DevOps\n\n"
+        f"🌐 <b>Dashboard:</b> {html.escape(dashboard_url)}\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Thử ngay: gửi ảnh bất kỳ thiết bị trong nhà ↑",
+        parse_mode="HTML",
+    )
+
+
 def build_demo_handlers() -> list:
     return [
         CommandHandler("remind", remind_handler),
         CommandHandler("status", status_handler),
+        CommandHandler("demo", demo_handler),
     ]
