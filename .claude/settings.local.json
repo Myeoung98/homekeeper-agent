@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 /Users/ton/Code/Claude/Vibe/_bmad/scripts/resolve_customization.py --skill /Users/ton/.claude/skills/bmad-dev-story --key workflow)"
+    ]
+  }
+}

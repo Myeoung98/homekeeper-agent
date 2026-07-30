@@ -1,0 +1,101 @@
+# generated: 2026-06-25
+# last_updated: 2026-07-01
+# project: HomeKeeper Agent
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+#
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories are worked in order within each epic (sequential default)
+# - Dev moves story to 'review', then runs bmad-code-review (fresh context recommended)
+# - Retrospective appends its action items to action_items; sprint-status surfaces open ones
+
+generated: 2026-06-25
+last_updated: 2026-07-05
+
+action_items:
+  - epic: 4
+    action: "Run retrospective after every future epic — treat as required, not optional"
+    owner: "Ton (Project Lead)"
+    status: open
+  - epic: 4
+    action: "Fix isdigit() -> try/except ValueError pattern in repairman_handlers.py and incident_handlers.py"
+    owner: "Developer agent"
+    status: open
+  - epic: 4
+    action: "Add startup warning log when ADMIN_USER_ID env var is unset or 0"
+    owner: "Developer agent"
+    status: open
+  - epic: 4
+    action: "Add caplog assertions to AC-5 member-failure scheduler tests (assert logger.warning called)"
+    owner: "Developer agent"
+    status: open
+  - epic: 4
+    action: "Document verify-before-build as explicit first step in story creation process"
+    owner: "Ton (Project Lead)"
+    status: open
+project: HomeKeeper Agent
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+
+  # ─── Epic 1: Task Management & Bot Foundation ───────────────────────────────
+  epic-1: in-progress
+  1-1-bot-foundation-and-admin-auth: done
+  1-2-add-maintenance-task: done
+  1-3-view-task-list: done
+  1-4-edit-and-delete-task: done
+  epic-1-retrospective: optional
+
+  # ─── Epic 2: Automatic Reminder Engine ──────────────────────────────────────
+  epic-2: in-progress
+  2-1-scheduler-infrastructure: done
+  2-2-d-1-reminder-delivery: done
+  2-3-d-0-reminder-with-action-buttons: done
+  2-4-task-completion-and-auto-reschedule: done
+  2-5-overdue-hourly-re-notification-and-catch-up-on-restart: done
+  epic-2-retrospective: optional
+
+  # ─── Epic 3: Incident Reporting & Repairman Finder ──────────────────────────
+  epic-3: in-progress
+  3-1-repairman-directory-management: done
+  3-2-incident-reporting: done
+  3-3-repairman-suggestion-hitl: done
+  epic-3-retrospective: optional
+
+  # ─── Epic 4: Family Sharing ─────────────────────────────────────────────────
+  epic-4: in-progress
+  4-1-member-management: done
+  4-2-member-aware-reminder-delivery: done
+  epic-4-retrospective: done
