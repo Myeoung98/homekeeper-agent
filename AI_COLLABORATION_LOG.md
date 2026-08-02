@@ -13,7 +13,7 @@
 | Mô hình AI trong sản phẩm | Groq `llama-3.3-70b-versatile` (NLP) + OpenRouter Vision (phân tích ảnh) |
 | AI dùng để build | Claude Sonnet (Claude Code CLI) |
 | Phương pháp | Vibe Coding — AI lead, developer steer |
-| Tổng commits | 15 commits, từ `58ac64f` đến `dcee60f` |
+| Tổng commits | 19 commits, từ `58ac64f` đến `78b9fe8` |
 
 ---
 
@@ -165,6 +165,112 @@ show NLP demo, multi-tenant pitch, kết thúc bằng CTA.
 
 ---
 
+## Giai đoạn 5 — Cải thiện UX & test coverage
+
+**Vấn đề:** Sau khi demo, phát hiện 16 điểm UX chưa tốt — từ thông báo lỗi không rõ ràng đến thiếu validation ngày tháng. Test suite cần phủ hết các case mới.
+
+**Prompt gửi AI:**
+```
+Audit toàn bộ conversation handlers. Tìm và fix: (1) alert cho non-admin
+dùng show_alert=True, (2) stale reminder dùng edit_text thay vì send mới,
+(3) validate ngày tương lai khi /add, (4) accept "có/co/yes/y/ok" khi confirm,
+(5) gợi ý /cancel ở mọi conversation state, (6) giải thích khi user chưa
+authenticated, (7) AI handler fix VN timezone, (8) truncate expense note,
+(9) household_id guard toàn bộ handlers. Sau đó chạy full test suite.
+```
+
+**AI thực hiện 16 fix:**
+- Non-admin alert dùng `show_alert=True` — popup nổi bật thay vì silent
+- Stale reminder dùng `edit_text` thay vì gửi message trùng lặp
+- Future date validation trong `/add` — reject ngày trong quá khứ
+- Confirmation variants: "có/co/yes/y/ok" đều accepted
+- `/cancel` hint tự động hiện ở mọi bước conversation
+- Unauthenticated user nhận được message giải thích thay vì bot im lặng
+- AI handler fix timezone sang `Asia/Ho_Chi_Minh`
+- Expense note tự động truncate nếu quá dài
+- `household_id` guard áp dụng đồng bộ toàn bộ handlers
+- 294 tests viết bổ sung — tất cả pass
+
+**Commit:** `78b9fe8` — *Comprehensive UX improvements: 16 audit fixes + full test suite green*
+
+---
+
+## Giai đoạn 6 — Hoàn thiện demo & đăng ký command menu
+
+### Command menu Telegram
+
+**Vấn đề:** User gõ "/" trong Telegram không thấy gợi ý lệnh — trải nghiệm kém với người dùng lần đầu.
+
+**Prompt gửi AI:**
+```
+Đăng ký BotCommand menu để khi user gõ "/" trong Telegram client,
+hiện đủ 10 commands với description. Dùng post_init hook của PTB.
+```
+
+**AI sinh ra:**
+```python
+async def _set_commands(application):
+    await application.bot.set_my_commands([
+        BotCommand("start", "Bắt đầu / xem hướng dẫn"),
+        BotCommand("tasks", "Danh sách công việc bảo trì"),
+        # ... 10 commands
+    ])
+
+application.post_init = _set_commands
+```
+
+**Commit:** `ec64494` — *Register bot command menu so '/' shows all available commands*
+
+---
+
+### Demo polish — fallback AI & role-aware /start
+
+**Vấn đề:** Groq đôi khi unavailable trong demo live; `/start` hiển thị giống nhau cho admin và member; `/demo` thiếu bước showcase expense và rating.
+
+**Prompt gửi AI:**
+```
+(1) Thêm graceful fallback khi Groq unavailable — bot vẫn trả lời được
+thay vì crash. (2) /start hiển thị khác nhau cho admin vs member.
+(3) Thêm Steps 5–8 vào /demo: expense demo, rating demo, multi-tenant
+pitch, CTA liên hệ.
+```
+
+**AI cập nhật:**
+- Groq call bọc trong try/except với fallback response tự nhiên bằng tiếng Việt
+- `/start` kiểm tra role — admin thấy thêm `/add`, `/edit`, `/delete`, `/repairman`
+- `/demo` mở rộng Steps 5–8: giả lập ghi chi phí sửa chữa, flow đánh giá thợ sao, pitch multi-tenant, CTA với contact info
+
+**Commit:** `1a5a17a` — *Polish demo: graceful AI fallback, update /start help, add expense+rating steps to /demo*
+
+---
+
+## Giai đoạn 7 — Tính năng mới: Proactive Advisor, Photo Incident, Expense, Rating
+
+**Vấn đề:** Cần 4 tính năng để hoàn thiện product story trước pitch: (1) AI chủ động nhắc nhở trước thay vì chờ user hỏi, (2) báo sự cố bằng ảnh với một tap, (3) ghi nhận chi phí sửa chữa, (4) đánh giá thợ sau khi hoàn tất.
+
+**Prompt gửi AI:**
+```
+Thêm 4 tính năng mới:
+1. Proactive advisor: mỗi sáng scan tasks sắp đến hạn trong 7 ngày, AI
+   generate lời nhắc proactive gửi vào group (không phải reminder thụ động).
+2. Photo incident: user gửi ảnh → Vision AI phân tích → inline button
+   "Lưu & tìm thợ" để tạo incident trực tiếp.
+3. /expense command: ghi nhận chi phí sửa chữa theo incident.
+4. Rating: sau khi đóng incident, gửi inline buttons 1–5 sao để đánh giá thợ.
+```
+
+**AI thiết kế và sinh code:**
+- `scheduler/loop.py` — proactive advisor chạy mỗi sáng 7h, query tasks 7 ngày tới, gọi Groq generate lời khuyên cá nhân hóa theo từng household
+- `photo_handlers.py` — mở rộng: sau Vision analysis, hiện inline button **"💾 Lưu & tìm thợ"** → 1 tap tạo incident + tìm repairman phù hợp
+- `expense_handlers.py` — `/expense` conversation flow: chọn incident → nhập số tiền → nhập ghi chú → lưu DB
+- `rating_handlers.py` — sau khi incident status → closed, auto-send inline keyboard 5 nút sao ⭐ → cập nhật repairman rating trung bình
+
+**Insight từ AI:** "Proactive advisor đổi paradigm từ pull (user hỏi) sang push (bot chủ động) — đây là điểm khác biệt với reminder app thông thường."
+
+**Commit:** `7a6fc1a` — *Add 4 new features: proactive advisor, photo incident, expense tracking, repairman rating*
+
+---
+
 ## AI trong sản phẩm — tóm tắt kỹ thuật
 
 ```
@@ -188,8 +294,6 @@ Match với REPAIRMAN table → suggest thợ phù hợp
 ```
 
 **AI không phải tính năng thêm vào — AI là interface chính của sản phẩm.** Không có NLP và Vision, bot chỉ là command-line wrapper. Với AI, bot hiểu ý người dùng và kết nối với dữ liệu nhà.
-
----
 
 ## Lessons learned từ vibe coding
 

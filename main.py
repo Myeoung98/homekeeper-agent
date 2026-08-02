@@ -36,6 +36,7 @@ from homekeeper.bot.task_handlers import (
 from homekeeper.bot.ai_handlers import build_ai_handler
 from homekeeper.bot.photo_handlers import build_photo_handler
 from homekeeper.bot.onboarding_handlers import build_onboarding_handler
+from homekeeper.bot.report_handlers import build_report_handler
 from homekeeper.dashboard.app import create_app as create_dashboard
 from homekeeper.db.connection import open_db
 from homekeeper.scheduler.catchup import run_catchup
@@ -75,7 +76,8 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "  /incident — Mô tả hoặc gửi ảnh, tìm thợ phù hợp\n\n"
             "💰 <b>Chi phí</b>\n"
             "  /expense &lt;số tiền&gt; — Ghi chi phí\n"
-            "  /expense — Xem tổng hợp 6 tháng\n\n"
+            "  /expense — Xem biểu đồ 6 tháng\n"
+            "  /report — Báo cáo tổng hợp tháng\n\n"
             "📊 <b>Tổng quan</b>\n"
             "  /status — Dashboard tổng quan\n\n"
             "💡 <i>Gõ /cancel bất cứ lúc nào để hủy thao tác đang dở.</i>\n"
@@ -89,7 +91,8 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "  📸 Gửi ảnh thiết bị hỏng — bot nhận dạng\n"
             "  /incident — Báo sự cố & tìm thợ\n"
             "  /list — Xem lịch bảo trì\n"
-            "  /expense — Chi phí bảo trì\n\n"
+            "  /expense — Chi phí bảo trì\n"
+            "  /report — Báo cáo tháng\n\n"
             "<i>Liên hệ admin gia đình nếu cần thêm quyền.</i>"
         )
     await update.effective_message.reply_text(text, parse_mode="HTML")
@@ -159,6 +162,7 @@ def main() -> None:
     )
     for h in build_expense_handlers():
         application.add_handler(h)
+    application.add_handler(build_report_handler())
 
     try:
         run_catchup(app_db)
@@ -200,6 +204,7 @@ def main() -> None:
             BotCommand("repairman", "Quản lý danh bạ thợ"),
             BotCommand("member",    "Quản lý thành viên gia đình"),
             BotCommand("expense",   "Ghi/xem chi phí bảo trì"),
+            BotCommand("report",    "Báo cáo tổng hợp tháng"),
             BotCommand("status",    "Tổng quan dashboard"),
         ])
         logger.info("Bot command menu registered")

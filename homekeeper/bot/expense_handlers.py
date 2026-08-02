@@ -54,20 +54,32 @@ async def expense_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return
 
-    lines = ["💰 <b>Chi phí bảo trì theo tháng</b>\n"]
+    # Parse rows in chronological order (DB returns newest first)
+    months = []
     total_all = 0
-    for row in rows:
-        month_str = row[0]          # YYYY-MM
+    for row in reversed(rows):
+        month_str = row[0]   # YYYY-MM
         total = row[1] or 0
         cnt = row[2] or 0
         total_all += total
         y, m = month_str.split("-")
-        formatted = f"{total:,}".replace(",", ".")
-        lines.append(f"  {m}/{y}: <b>{formatted} VND</b> ({cnt} lần)")
+        months.append({"label": f"{m}/{y}", "total": total, "cnt": cnt})
+
+    # Build text bar chart
+    max_total = max(mo["total"] for mo in months) or 1
+    bar_width = 12
+    chart_lines = ["💰 <b>Chi phí bảo trì 6 tháng</b>\n"]
+    for mo in months:
+        fill = round(mo["total"] / max_total * bar_width)
+        bar = "█" * fill + "░" * (bar_width - fill)
+        amt = f"{mo['total']:,}".replace(",", ".")
+        chart_lines.append(f"<code>{mo['label']}  {bar}  {amt}đ</code>")
 
     grand = f"{total_all:,}".replace(",", ".")
-    lines.append(f"\n📊 Tổng 6 tháng: <b>{grand} VND</b>")
-    await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+    avg = f"{total_all // len(months):,}".replace(",", ".") if months else "0"
+    chart_lines.append(f"\n📊 Tổng: <b>{grand} VND</b>  |  TB/tháng: {avg} VND")
+    chart_lines.append(f"<i>({sum(mo['cnt'] for mo in months)} lần ghi nhận)</i>")
+    await update.effective_message.reply_text("\n".join(chart_lines), parse_mode="HTML")
 
 
 def build_expense_handlers() -> list:

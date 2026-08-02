@@ -191,10 +191,24 @@ def _check_proactive(conn, task, today: date) -> None:
         return
 
     vn_due = due.strftime("%d/%m/%Y")
+    name_lower = task["name"].lower()
+    if any(k in name_lower for k in ("máy lạnh", "điều hòa", "ac", "air")):
+        tip = "Nên đặt thợ vệ sinh trước để tránh hết lịch vào hè."
+    elif any(k in name_lower for k in ("lọc nước", "filter", "lọc")):
+        tip = "Mua lõi lọc thay thế trước để tránh chờ giao hàng."
+    elif any(k in name_lower for k in ("điện", "electric", "aptomat", "cầu dao")):
+        tip = "Chuẩn bị đèn pin và liên hệ thợ điện nếu cần kiểm tra."
+    elif any(k in name_lower for k in ("nước", "ống", "bồn", "water")):
+        tip = "Kiểm tra thêm van khóa và áp lực nước trước khi bảo trì."
+    elif any(k in name_lower for k in ("sơn", "tường", "mái", "trần")):
+        tip = "Chọn ngày nắng ráo để việc sơn/chống thấm đạt chất lượng tốt nhất."
+    else:
+        tip = "Chuẩn bị sẵn hoặc đặt lịch thợ trước để không bị trễ."
+
     text = (
-        f"🤔 <b>Nhắc sớm:</b> <b>{html.escape(task['name'])}</b> còn {_PROACTIVE_DAYS} ngày nữa "
-        f"là đến hạn ({vn_due}).\n"
-        f"Chuẩn bị sẵn hoặc đặt lịch thợ trước nhé!"
+        f"🤔 <b>Nhắc sớm ({_PROACTIVE_DAYS} ngày):</b> <b>{html.escape(task['name'])}</b> "
+        f"đến hạn {vn_due}.\n"
+        f"💡 {tip}"
     )
 
     # Send to the household group chat (household_id == chat_id)
