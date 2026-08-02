@@ -66,7 +66,13 @@ async def ai_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as exc:
         logger.error("AI analysis error: %s", exc)
         await update.effective_message.reply_text(
-            "❌ Không thể xử lý yêu cầu. Vui lòng thử lại sau."
+            "🏠 Xin lỗi, AI đang bận. Bạn có thể dùng lệnh trực tiếp:\n\n"
+            "📋 /list — xem công việc bảo trì\n"
+            "🚨 /incident — báo sự cố & tìm thợ\n"
+            "🔧 /repairman list — danh bạ thợ\n"
+            "💰 /expense — chi phí bảo trì\n"
+            "📊 /status — tổng quan",
+            parse_mode=None,
         )
         return
 

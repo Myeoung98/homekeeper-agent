@@ -251,10 +251,37 @@ async def demo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         parse_mode="HTML",
     )
 
-    # ── Step 5: Multi-tenant pitch ────────────────────────────────────
+    # ── Step 5: Expense tracking ──────────────────────────────────────
     await _typing(update, 2.0)
     await update.effective_message.reply_text(
-        "👥 <b>Tính năng 3: Multi-tenant tự động</b>\n\n"
+        "💰 <b>Tính năng 3: Theo dõi chi phí bảo trì</b>\n\n"
+        "<i>Sau khi hoàn thành task, bot gợi ý ghi chi phí:</i>\n\n"
+        "  <code>/expense 350000 vệ sinh máy lạnh</code>\n"
+        "  → ✅ Đã ghi: <b>350.000 VND</b>\n\n"
+        "<code>/expense</code> — Xem tổng hợp 6 tháng:\n"
+        "  07/2025: <b>1.200.000 VND</b> (3 lần)\n"
+        "  08/2025: <b>350.000 VND</b> (1 lần)\n\n"
+        "<i>✦ Theo dõi ngân sách bảo trì hàng tháng dễ dàng</i>",
+        parse_mode="HTML",
+    )
+
+    # ── Step 6: Repairman rating ──────────────────────────────────────
+    await _typing(update, 2.0)
+    await update.effective_message.reply_text(
+        "⭐ <b>Tính năng 4: Đánh giá thợ sửa chữa</b>\n\n"
+        "<i>Sau khi dùng dịch vụ, bot hiển thị nút đánh giá:</i>\n\n"
+        "  ⭐ 1   ⭐⭐ 2   ⭐⭐⭐ 3   ⭐⭐⭐⭐ 4   ⭐⭐⭐⭐⭐ 5\n\n"
+        "<i>Lần sau báo sự cố, bot hiện rating kèm gợi ý:</i>\n"
+        "  🔧 <b>Nguyễn Văn An</b> — điện — 0901234567\n"
+        "  ⭐ 4.8/5 (12 đánh giá)\n\n"
+        "<i>✦ Xây dựng network thợ tin cậy theo thời gian</i>",
+        parse_mode="HTML",
+    )
+
+    # ── Step 7: Multi-tenant pitch ────────────────────────────────────
+    await _typing(update, 2.0)
+    await update.effective_message.reply_text(
+        "👥 <b>Tính năng 5: Multi-tenant tự động</b>\n\n"
         "  Mỗi group Telegram = 1 hộ gia đình riêng biệt\n"
         "  Dữ liệu hoàn toàn tách biệt giữa các hộ\n"
         "  Không cần đăng ký, không cần cài app\n\n"
@@ -266,7 +293,7 @@ async def demo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         parse_mode="HTML",
     )
 
-    # ── Step 6: CTA ───────────────────────────────────────────────────
+    # ── Step 8: CTA ───────────────────────────────────────────────────
     await _typing(update, 1.5)
     dashboard_url = os.environ.get("DASHBOARD_URL", "Railway URL của bạn")
     await update.effective_message.reply_text(

@@ -64,9 +64,12 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "👥 <b>Thành viên</b>\n"
         "  /member add | list | remove\n\n"
         "🚨 <b>Báo sự cố</b>\n"
-        "  /incident — Mô tả & tìm thợ phù hợp\n\n"
+        "  /incident — Mô tả hoặc gửi ảnh, tìm thợ phù hợp\n\n"
+        "💰 <b>Chi phí</b>\n"
+        "  /expense &lt;số tiền&gt; — Ghi chi phí\n"
+        "  /expense — Xem tổng hợp 6 tháng\n\n"
         "📊 <b>Tổng quan</b>\n"
-        "  /status — Dashboard\n"
+        "  /status — Dashboard tổng quan\n"
         "  /remind &lt;id&gt; — Gửi reminder ngay\n\n"
         "<i>👥 Thêm bot vào group gia đình để cả nhà cùng dùng!</i>",
         parse_mode="HTML",
