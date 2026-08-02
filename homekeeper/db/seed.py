@@ -17,7 +17,13 @@ def seed_if_empty(conn: sqlite3.Connection) -> None:
     if count > 0:
         return  # already has data — skip
 
-    HH1, HH2, HH3 = 1001, 1002, 1003
+    # Use admin's real Telegram user ID as HH1 so DM with bot shows demo data
+    import os
+    try:
+        HH1 = int(os.environ.get("ADMIN_USER_ID", 1001))
+    except (TypeError, ValueError):
+        HH1 = 1001
+    HH2, HH3 = 1002, 1003
 
     repairmen = [
         # (name, phone, service_type, household_id)

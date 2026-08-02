@@ -77,7 +77,10 @@ async def handle_reminder_callback(update: Update, context: ContextTypes.DEFAULT
     # Reply to chat
     task_name = html.escape(task["name"])
     if action == "done":
-        text = f"✅ Đã ghi nhận: <b>{task_name}</b> hoàn thành. Hạn tiếp theo: {new_due_display}."
+        text = (
+            f"✅ Đã ghi nhận: <b>{task_name}</b> hoàn thành. Hạn tiếp theo: {new_due_display}.\n"
+            f"💰 Có chi phí? Dùng <code>/expense &lt;số tiền&gt;</code> để ghi lại."
+        )
     else:
         text = f"⏭ Đã bỏ qua. Hạn tiếp theo: {new_due_display}."
 

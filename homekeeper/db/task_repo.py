@@ -58,6 +58,20 @@ def delete_task(conn: sqlite3.Connection, task_id: int, household_id: int = 0) -
     conn.commit()
 
 
+def get_tasks_due_within(conn: sqlite3.Connection, days: int) -> list:
+    """Return tasks due between tomorrow and `days` from now, across all households."""
+    from datetime import date, timedelta
+    today = date.today()
+    from_date = (today + timedelta(days=1)).isoformat()
+    to_date = (today + timedelta(days=days)).isoformat()
+    cursor = conn.execute(
+        "SELECT id, name, cycle_days, next_due_date, created_at, household_id "
+        "FROM TASK WHERE next_due_date >= ? AND next_due_date <= ? ORDER BY next_due_date ASC",
+        (from_date, to_date),
+    )
+    return cursor.fetchall()
+
+
 def advance_next_due_date(
     conn: sqlite3.Connection,
     task_id: int,

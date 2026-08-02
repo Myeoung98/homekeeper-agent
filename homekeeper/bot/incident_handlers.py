@@ -10,8 +10,10 @@ from telegram.ext import (
     filters,
 )
 
+from homekeeper.ai.assistant import analyze_photo
 from homekeeper.bot import _is_group_chat
 from homekeeper.db import incident_repo, member_repo, repairman_repo
+from homekeeper.db import repairman_rating_repo
 from homekeeper.domain import matching
 
 logger = logging.getLogger(__name__)
@@ -20,6 +22,7 @@ ASK_DESC = 0
 
 INCIDENT_YES_PATTERN = r'^incident_yes:\d+$'
 INCIDENT_NO_PATTERN = r'^incident_no$'
+RATE_REPAIRMAN_PATTERN = r'^rate_r:\d+:\d+:\d+$'
 
 
 def _is_authenticated(user_id: int, conn, household_id: int = 0, is_group: bool = False) -> bool:
@@ -49,9 +52,35 @@ async def incident_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         return ConversationHandler.END
     context.user_data["household_id"] = household_id
     await update.effective_message.reply_text(
-        "Mô tả sự cố: (ví dụ: điều hòa phòng ngủ không mát)"
+        "Mô tả sự cố bằng text hoặc gửi ảnh thiết bị hỏng:"
     )
     return ASK_DESC
+
+
+async def _save_and_ask_repairman(
+    update: Update,
+    description: str,
+    user_id: int,
+    household_id: int,
+    conn,
+    extra_text: str = "",
+) -> int:
+    try:
+        incident_id = incident_repo.create_incident(
+            conn, reported_by=user_id, description=description, household_id=household_id
+        )
+    except Exception as exc:
+        logger.error("Failed to save incident: %s", exc)
+        await update.effective_message.reply_text("Không thể lưu sự cố. Vui lòng thử lại.")
+        return ASK_DESC
+
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("Có", callback_data=f"incident_yes:{incident_id}"),
+        InlineKeyboardButton("Không", callback_data="incident_no"),
+    ]])
+    msg = extra_text + "\nBạn có cần tìm thợ sửa không?" if extra_text else "Bạn có cần tìm thợ sửa không?"
+    await update.effective_message.reply_text(msg, reply_markup=keyboard)
+    return ConversationHandler.END
 
 
 async def receive_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -65,26 +94,40 @@ async def receive_description(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = update.effective_user.id
     household_id = context.user_data.get("household_id", 0)
     conn = context.application.bot_data["db"]
-    try:
-        incident_id = incident_repo.create_incident(
-            conn, reported_by=user_id, description=text, household_id=household_id
-        )
-    except Exception as exc:
-        logger.error("Failed to save incident: %s", exc)
-        await update.effective_message.reply_text("Không thể lưu sự cố. Vui lòng thử lại.")
-        return ASK_DESC
+    return await _save_and_ask_repairman(update, text, user_id, household_id, conn)
 
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("Có", callback_data=f"incident_yes:{incident_id}"),
-            InlineKeyboardButton("Không", callback_data="incident_no"),
-        ]
-    ])
-    await update.effective_message.reply_text(
-        "Bạn có cần tìm thợ sửa không?",
-        reply_markup=keyboard,
+
+async def receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle photo sent during incident report — use Vision AI to generate description."""
+    if update.effective_user is None:
+        return ConversationHandler.END
+
+    user_id = update.effective_user.id
+    household_id = context.user_data.get("household_id", 0)
+    conn = context.application.bot_data["db"]
+
+    await update.effective_message.reply_text("🔍 Đang phân tích ảnh...")
+
+    photo = update.effective_message.photo[-1]
+    try:
+        file = await context.bot.get_file(photo.file_id)
+        photo_bytes = await file.download_as_bytearray()
+        result = analyze_photo(bytes(photo_bytes))
+        description = result.get("problem", "Sự cố từ ảnh")
+        severity = result.get("severity", "medium")
+        advice = result.get("advice", "")
+        sev_label = {"low": "🟢 Thấp", "medium": "🟠 Trung bình", "high": "🔴 Cao"}.get(severity, severity)
+        extra = f"🔍 <b>AI nhận diện:</b> {description}\n{sev_label}"
+        if advice:
+            extra += f"\n💡 {advice}"
+    except Exception as exc:
+        logger.warning("Photo analysis failed: %s", exc)
+        description = "Sự cố từ ảnh (không phân tích được)"
+        extra = ""
+
+    return await _save_and_ask_repairman(
+        update, description, user_id, household_id, conn, extra_text=extra
     )
-    return ConversationHandler.END
 
 
 async def incident_yes_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -150,11 +193,21 @@ async def incident_yes_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     lines = ["🔧 Thợ sửa gợi ý:\n"]
     for i, r in enumerate(matches, 1):
-        lines.append(f"{i}. {r['name']} — {r['service_type']} — {r['phone']}")
+        avg, cnt = repairman_rating_repo.get_avg_rating(conn, r["id"], household_id)
+        rating_str = f"  ⭐ {avg}/5 ({cnt} đánh giá)" if avg else ""
+        lines.append(f"{i}. <b>{r['name']}</b> — {r['service_type']} — {r['phone']}{rating_str}")
     lines.append("\nLiên hệ trực tiếp với thợ theo số điện thoại trên.")
+    lines.append("\n💬 Sau khi dùng dịch vụ, đánh giá thợ:")
+
+    # Rating buttons for first matched repairman
+    top = matches[0]
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton(f"⭐ {s}", callback_data=f"rate_r:{top['id']}:{s}:{incident_id}")
+        for s in range(1, 6)
+    ]])
 
     if query.message is not None:
-        await query.message.edit_text("\n".join(lines))
+        await query.message.edit_text("\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
 
 async def incident_no_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -162,6 +215,33 @@ async def incident_no_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
     if query.message is not None:
         await query.message.edit_text("✅ Đã ghi nhận sự cố. Liên hệ tôi nếu cần thêm hỗ trợ.")
+
+
+async def rate_repairman_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle rate_r:{repairman_id}:{stars}:{incident_id} callback."""
+    query = update.callback_query
+    await query.answer()
+    try:
+        _, repairman_id_str, stars_str, incident_id_str = query.data.split(":")
+        repairman_id = int(repairman_id_str)
+        stars = int(stars_str)
+        incident_id = int(incident_id_str)
+    except (ValueError, AttributeError):
+        return
+
+    household_id = update.effective_chat.id if update.effective_chat else 0
+    conn = context.application.bot_data["db"]
+    repairman_rating_repo.add_rating(
+        conn, repairman_id=repairman_id, stars=stars,
+        household_id=household_id, incident_id=incident_id,
+    )
+    star_str = "⭐" * stars
+    if query.message:
+        await query.message.edit_reply_markup(reply_markup=None)
+        await query.message.reply_text(
+            f"{star_str} Đã lưu đánh giá <b>{stars}/5</b> sao. Cảm ơn!",
+            parse_mode="HTML",
+        )
 
 
 async def incident_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -173,7 +253,10 @@ def build_incident_conversation() -> ConversationHandler:
     return ConversationHandler(
         entry_points=[CommandHandler("incident", incident_cmd)],
         states={
-            ASK_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_description)],
+            ASK_DESC: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_description),
+                MessageHandler(filters.PHOTO, receive_photo),
+            ],
         },
         fallbacks=[CommandHandler("cancel", incident_cancel)],
     )

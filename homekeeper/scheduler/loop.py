@@ -12,6 +12,8 @@ from homekeeper.db.connection import open_db
 from homekeeper.domain.overdue import days_overdue, is_overdue
 from homekeeper.scheduler import sender
 
+_PROACTIVE_DAYS = 7   # send proactive reminder when task is due in this many days
+
 _VN_TZ = timezone(timedelta(hours=7))
 
 logger = logging.getLogger(__name__)
@@ -171,6 +173,43 @@ def _check_overdue(conn, task) -> None:
             )
 
 
+def _check_proactive(conn, task, today: date) -> None:
+    """Send a proactive reminder 7 days before due date — once per cycle."""
+    task_id = task["id"]
+    due_date = task["next_due_date"]
+    due = date.fromisoformat(due_date)
+    days_left = (due - today).days
+    if days_left != _PROACTIVE_DAYS:
+        return
+
+    # Idempotency: only send once per due-date cycle
+    if reminder_log_repo.already_sent(conn, task_id, "proactive", today.isoformat()):
+        return
+
+    if not _task_unchanged(conn, task_id, due_date):
+        return
+
+    vn_due = due.strftime("%d/%m/%Y")
+    text = (
+        f"🤔 <b>Nhắc sớm:</b> <b>{html.escape(task['name'])}</b> còn {_PROACTIVE_DAYS} ngày nữa "
+        f"là đến hạn ({vn_due}).\n"
+        f"Chuẩn bị sẵn hoặc đặt lịch thợ trước nhé!"
+    )
+
+    # Send to the household group chat (household_id == chat_id)
+    household_id = task["household_id"]
+    chat_id = household_id if household_id != 0 else int(os.environ.get("ADMIN_USER_ID", 0))
+    try:
+        sender.send_telegram_message(chat_id, text)
+    except Exception as exc:
+        logger.warning("Proactive reminder failed task_id=%d: %s", task_id, exc)
+        return
+
+    sent_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    reminder_log_repo.log_sent(conn, task_id, "proactive", sent_at)
+    logger.info("Proactive reminder sent: task_id=%d name=%r due=%s", task_id, task["name"], due_date)
+
+
 def _tick(conn, _now=None) -> None:
     """One scheduler tick. _now is injectable for testing (defaults to VN local time)."""
     logger.debug("Scheduler tick")
@@ -178,9 +217,11 @@ def _tick(conn, _now=None) -> None:
         _now = datetime.now(_VN_TZ)
     if _now.hour < 8:
         return
-    tasks = task_repo.get_all_tasks(conn)
-    tomorrow = _now.date() + timedelta(days=1)
     today = _now.date()
+    tomorrow = today + timedelta(days=1)
+
+    # D-1, D-0, overdue — existing tasks (household 0 / default)
+    tasks = task_repo.get_all_tasks(conn)
     for task in tasks:
         try:
             due = date.fromisoformat(task["next_due_date"])
@@ -193,6 +234,14 @@ def _tick(conn, _now=None) -> None:
             _check_d0(conn, task)
         if due < today:
             _check_overdue(conn, task)
+
+    # Proactive advisor — tasks due in 7 days, across all households
+    proactive_tasks = task_repo.get_tasks_due_within(conn, days=_PROACTIVE_DAYS)
+    for task in proactive_tasks:
+        try:
+            _check_proactive(conn, task, today)
+        except Exception as exc:
+            logger.error("Proactive check error task_id=%s: %s", task["id"], exc)
 
 
 def _run_loop() -> None:

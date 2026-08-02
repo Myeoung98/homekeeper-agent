@@ -130,7 +130,7 @@ async def test_incident_cmd_shows_description_prompt(conn):
     update, context = _make_uc(conn, user_id=12345)
     await incident_cmd(update, context)
     prompt = update.effective_message.reply_text.call_args[0][0]
-    assert "điều hòa phòng ngủ không mát" in prompt
+    assert "Mô tả sự cố" in prompt
 
 
 # ---------------------------------------------------------------------------

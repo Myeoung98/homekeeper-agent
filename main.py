@@ -13,12 +13,15 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes
 
 from homekeeper.bot import admin_only
+from homekeeper.bot.expense_handlers import build_expense_handlers
 from homekeeper.bot.incident_handlers import (
     INCIDENT_NO_PATTERN,
     INCIDENT_YES_PATTERN,
+    RATE_REPAIRMAN_PATTERN,
     build_incident_conversation,
     incident_no_callback,
     incident_yes_callback,
+    rate_repairman_callback,
 )
 from homekeeper.bot.reminder_callbacks import CALLBACK_PATTERN, handle_reminder_callback
 from homekeeper.bot.demo_handlers import build_demo_handlers
@@ -126,6 +129,14 @@ def main() -> None:
             pattern=INCIDENT_YES_PATTERN,
         )
     )
+    application.add_handler(
+        CallbackQueryHandler(
+            rate_repairman_callback,
+            pattern=RATE_REPAIRMAN_PATTERN,
+        )
+    )
+    for h in build_expense_handlers():
+        application.add_handler(h)
 
     try:
         run_catchup(app_db)

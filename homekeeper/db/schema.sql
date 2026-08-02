@@ -37,3 +37,22 @@ CREATE TABLE IF NOT EXISTS INCIDENT (
     created_at  TEXT    NOT NULL,   -- ISO-8601 datetime (stored UTC)
     household_id INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS EXPENSE (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id      INTEGER,            -- NULL if standalone
+    incident_id  INTEGER,            -- NULL if tied to task
+    amount       INTEGER NOT NULL,   -- VND
+    note         TEXT,
+    created_at   TEXT    NOT NULL,
+    household_id INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS REPAIRMAN_RATING (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    repairman_id INTEGER NOT NULL,
+    incident_id  INTEGER,
+    stars        INTEGER NOT NULL,   -- 1–5
+    created_at   TEXT    NOT NULL,
+    household_id INTEGER NOT NULL DEFAULT 0
+);
