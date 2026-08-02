@@ -33,7 +33,7 @@ async def member_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             await update.effective_message.reply_text("Bạn không có quyền quản lý thành viên.")
             return ConversationHandler.END
 
-    household_id = update.effective_chat.id
+    household_id = update.effective_chat.id if update.effective_chat else 0
     context.user_data["household_id"] = household_id
 
     sub = (context.args or [""])[0].lower()
@@ -246,7 +246,7 @@ async def receive_remove_confirm(update: Update, context: ContextTypes.DEFAULT_T
         )
         return ConversationHandler.END
 
-    if text.lower() == "có":
+    if text.lower() in ("có", "co", "yes", "y", "ok"):
         conn = context.application.bot_data["db"]
         try:
             member_repo.delete_member(conn, member["id"], household_id)

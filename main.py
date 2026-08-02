@@ -48,32 +48,51 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-@admin_only
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.effective_message.reply_text(
-        "🏠 <b>HomeKeeper Agent</b> — Trợ lý nhà thông minh\n\n"
-        "🤖 <b>AI tự nhiên</b>\n"
-        "  💬 Nhắn text bất kỳ — bot tự hiểu\n"
-        "  📸 Gửi ảnh hỏng hóc — bot nhận dạng & gợi ý thợ\n\n"
-        "📋 <b>Quản lý công việc</b>\n"
-        "  /add — Thêm lịch bảo trì\n"
-        "  /list — Xem danh sách\n"
-        "  /edit — Sửa   /delete — Xóa\n\n"
-        "🔧 <b>Thợ sửa chữa</b>\n"
-        "  /repairman add | list\n\n"
-        "👥 <b>Thành viên</b>\n"
-        "  /member add | list | remove\n\n"
-        "🚨 <b>Báo sự cố</b>\n"
-        "  /incident — Mô tả hoặc gửi ảnh, tìm thợ phù hợp\n\n"
-        "💰 <b>Chi phí</b>\n"
-        "  /expense &lt;số tiền&gt; — Ghi chi phí\n"
-        "  /expense — Xem tổng hợp 6 tháng\n\n"
-        "📊 <b>Tổng quan</b>\n"
-        "  /status — Dashboard tổng quan\n"
-        "  /remind &lt;id&gt; — Gửi reminder ngay\n\n"
-        "<i>👥 Thêm bot vào group gia đình để cả nhà cùng dùng!</i>",
-        parse_mode="HTML",
-    )
+    import os
+    user_id = update.effective_user.id if update.effective_user else None
+    try:
+        admin_id = int(os.environ.get("ADMIN_USER_ID", ""))
+    except ValueError:
+        admin_id = None
+    is_admin = (user_id == admin_id)
+
+    if is_admin:
+        text = (
+            "🏠 <b>HomeKeeper Agent</b> — Trợ lý nhà thông minh\n\n"
+            "🤖 <b>AI tự nhiên</b>\n"
+            "  💬 Nhắn text bất kỳ — bot tự hiểu\n"
+            "  📸 Gửi ảnh hỏng hóc — bot nhận dạng & gợi ý thợ\n\n"
+            "📋 <b>Quản lý công việc</b>\n"
+            "  /add — Thêm lịch bảo trì\n"
+            "  /list — Xem danh sách\n"
+            "  /edit — Sửa   /delete — Xóa\n\n"
+            "🔧 <b>Thợ sửa chữa</b>\n"
+            "  /repairman add | list\n\n"
+            "👥 <b>Thành viên</b>\n"
+            "  /member add | list | remove\n\n"
+            "🚨 <b>Báo sự cố</b>\n"
+            "  /incident — Mô tả hoặc gửi ảnh, tìm thợ phù hợp\n\n"
+            "💰 <b>Chi phí</b>\n"
+            "  /expense &lt;số tiền&gt; — Ghi chi phí\n"
+            "  /expense — Xem tổng hợp 6 tháng\n\n"
+            "📊 <b>Tổng quan</b>\n"
+            "  /status — Dashboard tổng quan\n\n"
+            "💡 <i>Gõ /cancel bất cứ lúc nào để hủy thao tác đang dở.</i>\n"
+            "<i>👥 Thêm bot vào group gia đình để cả nhà cùng dùng!</i>"
+        )
+    else:
+        text = (
+            "🏠 <b>HomeKeeper Agent</b> — Trợ lý nhà thông minh\n\n"
+            "Bạn có thể:\n"
+            "  💬 Nhắn text tự nhiên — bot tự hiểu\n"
+            "  📸 Gửi ảnh thiết bị hỏng — bot nhận dạng\n"
+            "  /incident — Báo sự cố & tìm thợ\n"
+            "  /list — Xem lịch bảo trì\n"
+            "  /expense — Chi phí bảo trì\n\n"
+            "<i>Liên hệ admin gia đình nếu cần thêm quyền.</i>"
+        )
+    await update.effective_message.reply_text(text, parse_mode="HTML")
 
 
 def main() -> None:
@@ -152,7 +171,8 @@ def main() -> None:
     application.add_handler(build_onboarding_handler())
 
     # Photo analysis — before AI text catch-all
-    application.add_handler(build_photo_handler())
+    for h in build_photo_handler():
+        application.add_handler(h)
 
     # AI text catch-all must be last (lowest priority)
     application.add_handler(build_ai_handler())

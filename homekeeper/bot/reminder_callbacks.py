@@ -20,23 +20,27 @@ async def handle_reminder_callback(update: Update, context: ContextTypes.DEFAULT
     Single writer for TASK.next_due_date (AD-8).
     """
     query = update.callback_query
-    # Acknowledge immediately — clears Telegram spinner regardless of outcome
-    await query.answer()
 
     # Guard: no message to reply to (deleted message or channel post)
     if query.message is None:
+        await query.answer()
         return
 
-    # Admin-only guard: non-admin gets spinner cleared but no action
+    # Admin-only guard: non-admin gets alert, admin gets spinner cleared below
     admin_id_str = os.environ.get("ADMIN_USER_ID", "")
     try:
         admin_id = int(admin_id_str)
     except ValueError:
         logger.error("ADMIN_USER_ID is not a valid integer: %r", admin_id_str)
+        await query.answer()
         return
 
     if update.effective_user is None or update.effective_user.id != admin_id:
+        await query.answer("Chỉ admin mới có thể xác nhận hoàn thành.", show_alert=True)
         return
+
+    # Acknowledge — clears Telegram spinner for admin
+    await query.answer()
 
     # Parse callback_data
     data = query.data
@@ -51,8 +55,9 @@ async def handle_reminder_callback(update: Update, context: ContextTypes.DEFAULT
 
     # Stale check: task deleted or already advanced to next cycle
     if task is None or task["next_due_date"] != due_date_str:
-        await query.message.reply_text(
-            "Reminder này đã hết hiệu lực. Xem /list để biết trạng thái hiện tại."
+        await query.message.edit_text(
+            "⏰ Reminder này đã hết hiệu lực. Dùng /list để xem trạng thái hiện tại.",
+            reply_markup=None,
         )
         return
 

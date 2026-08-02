@@ -55,6 +55,10 @@ async def ai_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         conn = open_db()
 
     if not _is_authenticated(user_id, conn, household_id, _is_group_chat(update)):
+        await update.effective_message.reply_text(
+            "Bạn chưa được thêm vào hệ thống này. "
+            "Liên hệ admin gia đình để được thêm qua /member add."
+        )
         return
 
     await context.bot.send_chat_action(
@@ -106,7 +110,8 @@ async def _handle_create_task(
 
     task_name = result.get("task_name") or "Công việc bảo trì"
     cycle_days = int(result.get("cycle_days") or 30)
-    next_due = (datetime.now(timezone.utc) + timedelta(days=cycle_days)).strftime("%Y-%m-%d")
+    _VN_TZ = timezone(timedelta(hours=7))
+    next_due = (datetime.now(_VN_TZ) + timedelta(days=cycle_days)).strftime("%Y-%m-%d")
 
     task_id = create_task(conn, task_name, cycle_days, next_due, household_id)
 
@@ -114,9 +119,8 @@ async def _handle_create_task(
         f"✅ <b>Đã tạo công việc bảo trì!</b>\n\n"
         f"📋 <b>{task_name}</b>\n"
         f"🔄 Chu kỳ nhắc: mỗi {cycle_days} ngày\n"
-        f"📅 Lần nhắc tới: {next_due}\n"
-        f"🆔 Mã số: #{task_id}\n\n"
-        f"<i>Dùng /list để xem tất cả công việc.</i>",
+        f"📅 Lần nhắc tới: {next_due}\n\n"
+        f"<i>Dùng /list để xem và /edit để chỉnh sửa.</i>",
         parse_mode="HTML",
     )
 

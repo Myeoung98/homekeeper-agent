@@ -30,7 +30,7 @@ def _is_keep_old(text: str) -> bool:
 
 @admin_only
 async def list_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    household_id = update.effective_chat.id
+    household_id = update.effective_chat.id if update.effective_chat else 0
     conn = context.application.bot_data["db"]
     try:
         rows = task_repo.get_all_tasks(conn, household_id)
@@ -83,9 +83,11 @@ async def list_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 @admin_only
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["household_id"] = update.effective_chat.id
+    context.user_data["household_id"] = update.effective_chat.id if update.effective_chat else 0
     await update.effective_message.reply_text(
-        "Tên công việc là gì? (ví dụ: Thay lõi lọc nước)"
+        "Tên công việc là gì? (ví dụ: Thay lõi lọc nước)\n"
+        "<i>Gõ /cancel để hủy.</i>",
+        parse_mode="HTML",
     )
     return ASK_NAME
 
@@ -133,6 +135,12 @@ async def receive_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         await update.effective_message.reply_text(
             "Ngày không hợp lệ. Vui lòng nhập theo định dạng DD/MM/YYYY "
             "(ví dụ: 25/06/2026):"
+        )
+        return ASK_DATE
+    from datetime import date as _date
+    if due_date < _date.today():
+        await update.effective_message.reply_text(
+            "Ngày phải là hôm nay hoặc trong tương lai. Nhập lại:"
         )
         return ASK_DATE
 
@@ -186,7 +194,7 @@ def build_add_conversation() -> ConversationHandler:
 
 @admin_only
 async def edit_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    household_id = update.effective_chat.id
+    household_id = update.effective_chat.id if update.effective_chat else 0
     context.user_data["household_id"] = household_id
     conn = context.application.bot_data["db"]
     try:
@@ -416,7 +424,7 @@ def build_edit_conversation() -> ConversationHandler:
 
 @admin_only
 async def delete_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    household_id = update.effective_chat.id
+    household_id = update.effective_chat.id if update.effective_chat else 0
     context.user_data["household_id"] = household_id
     conn = context.application.bot_data["db"]
     try:
@@ -520,7 +528,7 @@ async def receive_delete_confirm(update: Update, context: ContextTypes.DEFAULT_T
         )
         return ConversationHandler.END
 
-    if text.lower() == "có":
+    if text.lower() in ("có", "co", "yes", "y", "ok"):
         conn = context.application.bot_data["db"]
         try:
             task_repo.delete_task(conn, task["id"], household_id)

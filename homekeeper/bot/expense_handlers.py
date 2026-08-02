@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 async def expense_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/expense [amount] — log an expense or show monthly summary."""
-    household_id = update.effective_chat.id
+    household_id = update.effective_chat.id if update.effective_chat else 0
     conn = context.application.bot_data["db"]
 
     # /expense <amount> — log new expense
@@ -28,8 +28,13 @@ async def expense_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await update.effective_message.reply_text("Số tiền phải lớn hơn 0.")
             return
 
-        note = " ".join(context.args[1:]) if len(context.args) > 1 else None
-        expense_repo.create_expense(conn, amount=amount, household_id=household_id, note=note)
+        note = " ".join(context.args[1:])[:200] if len(context.args) > 1 else None
+        try:
+            expense_repo.create_expense(conn, amount=amount, household_id=household_id, note=note)
+        except Exception as exc:
+            logger.error("Failed to save expense: %s", exc)
+            await update.effective_message.reply_text("Không thể ghi chi phí. Vui lòng thử lại.")
+            return
 
         formatted = f"{amount:,}".replace(",", ".")
         note_str = f" — {html.escape(note)}" if note else ""

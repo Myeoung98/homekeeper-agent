@@ -30,6 +30,7 @@ def _make_update_context(conn):
     update = MagicMock()
     update.effective_user = MagicMock()
     update.effective_user.id = 12345
+    update.effective_chat = None  # household_id=0 matches test DB default
     update.effective_message = message
 
     application = MagicMock()

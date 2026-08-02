@@ -46,6 +46,7 @@ def _make_uc(conn, text="", user_id=12345, args=None):
     update = MagicMock()
     update.effective_user = MagicMock()
     update.effective_user.id = user_id
+    update.effective_chat = None  # household_id=0, matches test DB default
     update.effective_message = message
     application = MagicMock()
     application.bot_data = {"db": conn}
@@ -67,6 +68,7 @@ def _make_callback_uc(conn, callback_data="incident_no", user_id=12345):
     update.callback_query = query
     update.effective_user = MagicMock()
     update.effective_user.id = user_id
+    update.effective_chat = None  # household_id=0, matches test DB default
     application = MagicMock()
     application.bot_data = {"db": conn}
     context = MagicMock()
@@ -231,9 +233,8 @@ async def test_incident_no_callback_answers_query(conn):
 async def test_incident_no_callback_sends_confirmation(conn):
     update, context = _make_callback_uc(conn, callback_data="incident_no")
     await incident_no_callback(update, context)
-    update.callback_query.message.edit_text.assert_called_once_with(
-        "✅ Đã ghi nhận sự cố. Liên hệ tôi nếu cần thêm hỗ trợ."
-    )
+    text = update.callback_query.message.edit_text.call_args[0][0]
+    assert "Đã ghi nhận sự cố" in text
 
 
 # ---------------------------------------------------------------------------
@@ -331,19 +332,21 @@ async def test_incident_yes_result_contains_footnote(conn):
     update, context = _make_callback_uc(conn, callback_data=f"incident_yes:{incident_id}")
     await incident_yes_callback(update, context)
     text = update.callback_query.message.edit_text.call_args[0][0]
-    assert "Liên hệ trực tiếp" in text
+    assert "Liên hệ" in text
 
 
 @pytest.mark.asyncio
-async def test_incident_yes_no_reply_markup_in_result(conn):
-    """AC-2: result must have no inline buttons."""
+async def test_incident_yes_has_rating_buttons(conn):
+    """Result includes rating buttons for matched repairmen."""
+    from telegram import InlineKeyboardMarkup
     incident_id = _seed_incident(conn)
     _seed_repairman(conn)
     update, context = _make_callback_uc(conn, callback_data=f"incident_yes:{incident_id}")
     await incident_yes_callback(update, context)
     call_kwargs = update.callback_query.message.edit_text.call_args
     reply_markup = call_kwargs.kwargs.get("reply_markup")
-    assert reply_markup is None
+    assert reply_markup is not None
+    assert isinstance(reply_markup, InlineKeyboardMarkup)
 
 
 @pytest.mark.asyncio

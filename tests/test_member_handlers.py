@@ -48,6 +48,7 @@ def _make_uc(conn, text="", user_id=12345, args=None):
     update = MagicMock()
     update.effective_user = MagicMock()
     update.effective_user.id = user_id
+    update.effective_chat = None  # household_id=0 matches test DB default
     update.effective_message = message
     application = MagicMock()
     application.bot_data = {"db": conn}

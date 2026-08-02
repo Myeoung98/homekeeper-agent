@@ -39,7 +39,7 @@ async def repairman_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             await update.effective_message.reply_text("Bạn không có quyền quản lý danh bạ thợ.")
             return ConversationHandler.END
 
-    household_id = update.effective_chat.id
+    household_id = update.effective_chat.id if update.effective_chat else 0
     context.user_data["household_id"] = household_id
 
     sub = (context.args or [""])[0].lower()
@@ -373,7 +373,7 @@ async def receive_delete_confirm(update: Update, context: ContextTypes.DEFAULT_T
         )
         return ConversationHandler.END
 
-    if text.lower() == "có":
+    if text.lower() in ("có", "co", "yes", "y", "ok"):
         conn = context.application.bot_data["db"]
         try:
             repairman_repo.delete_repairman(conn, repairman["id"], household_id)

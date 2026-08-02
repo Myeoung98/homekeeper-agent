@@ -46,6 +46,7 @@ def make_update(callback_data: str, user_id: int) -> tuple:
     update = MagicMock(spec=Update)
     update.callback_query = query
     update.effective_user = user
+    update.effective_chat = None  # makes household_id=0, matching test DB default
 
     return update, query
 
@@ -201,9 +202,9 @@ async def test_stale_button_no_db_change(conn, monkeypatch):
 
     # spinner cleared exactly once (bare answer, no show_alert)
     query.answer.assert_called_once_with()
-    # stale message sent via reply_text
-    query.message.reply_text.assert_called_once()
-    reply_text = query.message.reply_text.call_args[0][0]
+    # stale message sent via edit_text (removes old buttons)
+    query.message.edit_text.assert_called_once()
+    reply_text = query.message.edit_text.call_args[0][0]
     assert "hết hiệu lực" in reply_text
 
 
@@ -223,9 +224,9 @@ async def test_stale_button_deleted_task(conn, monkeypatch):
 
     # spinner cleared exactly once
     query.answer.assert_called_once_with()
-    # stale message sent via reply_text
-    query.message.reply_text.assert_called_once()
-    reply_text = query.message.reply_text.call_args[0][0]
+    # stale message sent via edit_text (removes old buttons)
+    query.message.edit_text.assert_called_once()
+    reply_text = query.message.edit_text.call_args[0][0]
     assert "hết hiệu lực" in reply_text
 
 
@@ -244,9 +245,11 @@ async def test_non_admin_callback_silently_ignored(conn, monkeypatch):
     from homekeeper.bot.reminder_callbacks import handle_reminder_callback
     await handle_reminder_callback(update, context)
 
-    # spinner cleared
+    # spinner cleared — with show_alert for non-admin users
     query.answer.assert_called_once()
-    # no reply message
+    call_kwargs = query.answer.call_args[1] if query.answer.call_args else {}
+    assert call_kwargs.get("show_alert") is True
+    # no reply_text message
     query.message.reply_text.assert_not_called()
     # task not advanced
     row = task_repo.get_task_by_id(conn, task_id)

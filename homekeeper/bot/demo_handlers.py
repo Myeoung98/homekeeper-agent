@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 @admin_only
 async def remind_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a task's D-0 reminder immediately — for demo/testing purposes."""
-    household_id = update.effective_chat.id
+    household_id = update.effective_chat.id if update.effective_chat else 0
     conn = context.application.bot_data["db"]
 
     if not context.args:
@@ -78,7 +78,7 @@ async def remind_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 @admin_only
 async def status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show a system dashboard — tasks, members, repairmen, incidents."""
-    household_id = update.effective_chat.id
+    household_id = update.effective_chat.id if update.effective_chat else 0
     conn = context.application.bot_data["db"]
     today = date.today()
 
@@ -159,7 +159,7 @@ async def demo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """Scripted investor demo walkthrough — /demo"""
     conn = context.application.bot_data["db"]
     today = date.today()
-    chat_id = update.effective_chat.id
+    chat_id = update.effective_chat.id if update.effective_chat else 0
 
     # ── Gather real stats ──────────────────────────────────────────────
     households = conn.execute(

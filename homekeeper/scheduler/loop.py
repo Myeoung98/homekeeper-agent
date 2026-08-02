@@ -109,10 +109,11 @@ def _check_d0(conn, task) -> None:
     reminder_log_repo.log_sent(conn, task_id, "D-0", sent_at)
     logger.info("D-0 reminder sent: task_id=%d name=%r due=%s", task_id, task["name"], due_date)
 
+    member_text = text + "\n<i>(Liên hệ admin gia đình để xác nhận hoàn thành.)</i>"
     members = member_repo.get_all_members(conn)
     for member in members:
         try:
-            sender.send_telegram_message(member["telegram_user_id"], text)
+            sender.send_telegram_message(member["telegram_user_id"], member_text)
         except Exception as exc:
             logger.warning(
                 "Failed to send D-0 to member %d: %s", member["telegram_user_id"], exc
@@ -133,7 +134,7 @@ def _check_overdue(conn, task) -> None:
     latest_sent_at = max(candidates) if candidates else None
     if latest_sent_at is not None:
         sent_dt = datetime.fromisoformat(latest_sent_at.replace("Z", "+00:00"))
-        if datetime.now(timezone.utc) - sent_dt < timedelta(hours=1):
+        if datetime.now(timezone.utc) - sent_dt < timedelta(hours=24):
             return
 
     if not _task_unchanged(conn, task_id, due_date):
@@ -215,7 +216,7 @@ def _tick(conn, _now=None) -> None:
     logger.debug("Scheduler tick")
     if _now is None:
         _now = datetime.now(_VN_TZ)
-    if _now.hour < 8:
+    if _now.hour < 8 or _now.hour >= 22:
         return
     today = _now.date()
     tomorrow = today + timedelta(days=1)

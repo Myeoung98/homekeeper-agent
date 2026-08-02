@@ -103,11 +103,11 @@ def test_check_overdue_respects_1_hour_gate(conn, monkeypatch):
     mock_send.assert_not_called()
 
 
-def test_check_overdue_fires_after_1_hour(conn, monkeypatch):
-    """Overdue sent 61 minutes ago → sends (gate passed)."""
+def test_check_overdue_fires_after_24_hours(conn, monkeypatch):
+    """Overdue sent 25 hours ago → sends (gate passed)."""
     monkeypatch.setenv("ADMIN_USER_ID", "999")
     task_id = task_repo.create_task(conn, "T", 30, yesterday_str())
-    old = (datetime.now(timezone.utc) - timedelta(minutes=61)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    old = (datetime.now(timezone.utc) - timedelta(hours=25)).strftime("%Y-%m-%dT%H:%M:%SZ")
     reminder_log_repo.log_sent(conn, task_id, "overdue", old)
     task = task_repo.get_task_by_id(conn, task_id)
 

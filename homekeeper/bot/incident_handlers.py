@@ -45,7 +45,7 @@ async def incident_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     if update.effective_user is None:
         return ConversationHandler.END
     user_id = update.effective_user.id
-    household_id = update.effective_chat.id
+    household_id = update.effective_chat.id if update.effective_chat else 0
     conn = context.application.bot_data["db"]
     if not _is_authenticated(user_id, conn, household_id, _is_group_chat(update)):
         await update.effective_message.reply_text("Bạn không có quyền sử dụng bot này.")
@@ -196,15 +196,19 @@ async def incident_yes_callback(update: Update, context: ContextTypes.DEFAULT_TY
         avg, cnt = repairman_rating_repo.get_avg_rating(conn, r["id"], household_id)
         rating_str = f"  ⭐ {avg}/5 ({cnt} đánh giá)" if avg else ""
         lines.append(f"{i}. <b>{r['name']}</b> — {r['service_type']} — {r['phone']}{rating_str}")
-    lines.append("\nLiên hệ trực tiếp với thợ theo số điện thoại trên.")
-    lines.append("\n💬 Sau khi dùng dịch vụ, đánh giá thợ:")
+    lines.append("\nLiên hệ thợ theo số trên. Sau khi dùng dịch vụ, đánh giá thợ:")
 
-    # Rating buttons for first matched repairman
-    top = matches[0]
-    keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton(f"⭐ {s}", callback_data=f"rate_r:{top['id']}:{s}:{incident_id}")
-        for s in range(1, 6)
-    ]])
+    # Rating rows for up to 3 matched repairmen
+    rating_rows = []
+    for r in matches[:3]:
+        rating_rows.append([
+            InlineKeyboardButton(
+                f"{r['name'][:12]} {'⭐'*s}",
+                callback_data=f"rate_r:{r['id']}:{s}:{incident_id}",
+            )
+            for s in range(1, 6)
+        ])
+    keyboard = InlineKeyboardMarkup(rating_rows)
 
     if query.message is not None:
         await query.message.edit_text("\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
@@ -214,7 +218,7 @@ async def incident_no_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     if query.message is not None:
-        await query.message.edit_text("✅ Đã ghi nhận sự cố. Liên hệ tôi nếu cần thêm hỗ trợ.")
+        await query.message.edit_text("📝 Đã ghi nhận sự cố. Dùng /incident nếu cần tìm thợ sau.")
 
 
 async def rate_repairman_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
