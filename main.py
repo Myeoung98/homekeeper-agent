@@ -9,7 +9,7 @@ import sys
 import threading
 
 import uvicorn
-from telegram import Update
+from telegram import BotCommand, Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes
 
 from homekeeper.bot import admin_only
@@ -164,6 +164,24 @@ def main() -> None:
     dashboard_thread = threading.Thread(target=_run_dashboard, daemon=True)
     dashboard_thread.start()
     logger.info("Dashboard running on port %d", port)
+
+    # Register bot command menu (shows when user types "/")
+    async def _set_commands(_app):
+        await _app.bot.set_my_commands([
+            BotCommand("start",     "Xem hướng dẫn & danh sách lệnh"),
+            BotCommand("list",      "Danh sách công việc bảo trì"),
+            BotCommand("add",       "Thêm công việc mới"),
+            BotCommand("edit",      "Sửa công việc"),
+            BotCommand("delete",    "Xóa công việc"),
+            BotCommand("incident",  "Báo sự cố & tìm thợ"),
+            BotCommand("repairman", "Quản lý danh bạ thợ"),
+            BotCommand("member",    "Quản lý thành viên gia đình"),
+            BotCommand("expense",   "Ghi/xem chi phí bảo trì"),
+            BotCommand("status",    "Tổng quan dashboard"),
+        ])
+        logger.info("Bot command menu registered")
+
+    application.post_init = _set_commands
 
     logger.info("HomeKeeper Agent started")
     application.run_polling()
